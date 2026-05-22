@@ -63,12 +63,10 @@ class ChatResponse(BaseModel):
 class CreateTaskRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=150)
     description: str
-    # Fixed to precisely match database strict ENUM criteria
-    difficulty: Literal["Beginner", "Intermediate", "Advanced"]
+    difficulty: Literal["Easy", "Medium", "Hard"]
     reward_xp: int = Field(..., gt=0)
-    required_skills: List[int]
-    # Place this at the end of your schemas.py file:
+    required_skills: List[int]  # List of skill IDs required for the task
 
 class ReviewRequest(BaseModel):
-    application_id: int
-    status: Literal["approved", "rejected"]
+    app_id: int
+    action: Literal["approve", "reject"]
