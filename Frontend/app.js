@@ -2,16 +2,45 @@
 // CONFIGURATION & GLOBAL STATE SYSTEM
 // ==========================================================================
 const API_BASE_URL = `${window.location.origin}/api`;
+const AUTH_STORAGE_VERSION = "supabase-v3";
 let currentView = "section-home";
+
+function ensureFreshAuthStorage() {
+    if (localStorage.getItem("auth_storage_version") !== AUTH_STORAGE_VERSION) {
+        localStorage.clear();
+        localStorage.setItem("auth_storage_version", AUTH_STORAGE_VERSION);
+    }
+}
 let activeDifficultyFilter = "all";
 
 // Initialization routine when document loads
 document.addEventListener("DOMContentLoaded", () => {
+    ensureFreshAuthStorage();
     initAppRouting();
     setupFormListeners();
     checkExistingAuth();
     setupFilterChips();
 });
+
+/** Fetch with Bearer token; auto logout on 401 */
+async function authFetch(url, options = {}) {
+    const token = localStorage.getItem("token");
+    if (!token || token === "null" || token === "undefined") {
+        performClientSignout();
+        showToast("Login required. Please sign in again.", "error");
+        return new Response(null, { status: 401, statusText: "No token" });
+    }
+    const headers = {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${token}`,
+    };
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401) {
+        performClientSignout();
+        showToast("Session expired. Please login again.", "error");
+    }
+    return res;
+}
 
 // ==========================================================================
 // ROUTING & NAVIGATION FRAMEWORK
@@ -104,29 +133,49 @@ function showToast(message, type = "success") {
 // ==========================================================================
 // AUTHENTICATION AND ACCESS control
 // ==========================================================================
-function checkExistingAuth() {
+async function checkExistingAuth() {
     const token = localStorage.getItem("token");
     const role = localStorage.getItem("role");
     const name = localStorage.getItem("name");
 
-    if (token && role) {
+    if (!token || !role) {
+        performClientSignout();
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+            performClientSignout();
+            showToast("Session expired. Please login again.", "error");
+            return;
+        }
+        const me = await res.json();
+        localStorage.setItem("role", me.role);
+        localStorage.setItem("name", me.name);
+        localStorage.setItem("user_id", me.user_id || "");
+
         document.getElementById("auth-logged-out").style.display = "none";
         document.getElementById("auth-logged-in").style.display = "flex";
-        document.getElementById("user-display-name").textContent = `👤 ${name}`;
+        document.getElementById("user-display-name").textContent = `👤 ${me.name || name}`;
         applyRoleBasedNav();
 
-        if (role === "admin") {
+        if (me.role === "admin") {
             navigateTo("section-admin");
         } else {
             navigateTo("section-dashboard");
         }
-    } else {
+    } catch {
         performClientSignout();
     }
 }
 
 function performClientSignout() {
+    const version = localStorage.getItem("auth_storage_version");
     localStorage.clear();
+    if (version) localStorage.setItem("auth_storage_version", version);
     document.getElementById("auth-logged-out").style.display = "flex";
     document.getElementById("auth-logged-in").style.display = "none";
     applyRoleBasedNav();
@@ -159,6 +208,7 @@ function setupFormListeners() {
             const data = await res.json();
             
             if (res.ok) {
+                localStorage.setItem("auth_storage_version", AUTH_STORAGE_VERSION);
                 localStorage.setItem("token", data.access_token);
                 localStorage.setItem("role", data.role);
                 localStorage.setItem("name", data.name);
@@ -368,14 +418,12 @@ function setupFormListeners() {
             password: document.getElementById("admin-student-password").value,
         };
         try {
-            const res = await fetch(`${API_BASE_URL}/admin/create-student`, {
+            const res = await authFetch(`${API_BASE_URL}/admin/create-student`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${localStorage.getItem("token")}`,
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
             });
+            if (res.status === 401) return;
             const data = await res.json();
             if (res.ok) {
                 showToast("Student account created successfully.");
@@ -758,8 +806,6 @@ function appendChatBubble(text, className) {
 async function loadAdminConsoleData() {
     if (localStorage.getItem("role") !== "admin") return;
 
-    const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
-
     try {
         const resAllSk = await fetch(`${API_BASE_URL}/skills/all`);
         const allSk = resAllSk.ok ? await resAllSk.json() : [];
@@ -772,13 +818,15 @@ async function loadAdminConsoleData() {
             if (el) el.innerHTML = skillOptions;
         });
 
-        const resStats = await fetch(`${API_BASE_URL}/admin/stats`, { headers });
+        const resStats = await authFetch(`${API_BASE_URL}/admin/stats`);
+        if (resStats.status === 401) return;
         const stats = resStats.ok ? await resStats.json() : {};
         document.getElementById("admin-stat-students").textContent = stats.students || 0;
         document.getElementById("admin-stat-pending").textContent = stats.pending || 0;
         document.getElementById("admin-stat-tasks").textContent = stats.tasks || 0;
 
-        const resStudents = await fetch(`${API_BASE_URL}/admin/users`, { headers });
+        const resStudents = await authFetch(`${API_BASE_URL}/admin/users`);
+        if (resStudents.status === 401) return;
         const students = resStudents.ok ? await resStudents.json() : [];
         const studentsTbody = document.getElementById("admin-students-tbody");
         studentsTbody.innerHTML = students.length
@@ -796,7 +844,8 @@ async function loadAdminConsoleData() {
                   .join("")
             : `<tr><td colspan="5" style="padding:15px; text-align:center; color:var(--text-muted)">No students registered yet.</td></tr>`;
 
-        const resTasks = await fetch(`${API_BASE_URL}/tasks/all`, { headers });
+        const resTasks = await authFetch(`${API_BASE_URL}/tasks/all`);
+        if (resTasks.status === 401) return;
         adminTasksCache = resTasks.ok ? await resTasks.json() : [];
         const tasksTbody = document.getElementById("admin-tasks-tbody");
         tasksTbody.innerHTML = adminTasksCache.length
@@ -817,7 +866,8 @@ async function loadAdminConsoleData() {
                   .join("")
             : `<tr><td colspan="5" style="padding:15px; text-align:center; color:var(--text-muted)">No tasks created yet.</td></tr>`;
 
-        const resAllApps = await fetch(`${API_BASE_URL}/admin/all-applications`, { headers });
+        const resAllApps = await authFetch(`${API_BASE_URL}/admin/all-applications`);
+        if (resAllApps.status === 401) return;
         const allApps = resAllApps.ok ? await resAllApps.json() : [];
         const allAppsTbody = document.getElementById("admin-all-apps-tbody");
         allAppsTbody.innerHTML = allApps.length
@@ -844,7 +894,8 @@ async function loadAdminConsoleData() {
                   .join("")
             : `<tr><td colspan="5" style="padding:15px; text-align:center; color:var(--text-muted)">No student applications yet.</td></tr>`;
 
-        const resSubs = await fetch(`${API_BASE_URL}/admin/submissions`, { headers });
+        const resSubs = await authFetch(`${API_BASE_URL}/admin/submissions`);
+        if (resSubs.status === 401) return;
         const subs = resSubs.ok ? await resSubs.json() : [];
         const subsTbody = document.getElementById("admin-submissions-tbody");
         subsTbody.innerHTML = subs.length

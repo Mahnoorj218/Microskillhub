@@ -1,11 +1,13 @@
 """Supabase Auth helpers for FastAPI."""
 
+import os
 from typing import Any, Dict
 
+import requests
 from fastapi import HTTPException, status
 
 from db import fetch_one, insert_row
-from supabase_client import get_supabase
+from supabase_client import get_supabase, _require_env
 
 
 def sign_up_user(
@@ -107,34 +109,75 @@ def sign_in_user(email: str, password: str, role: str) -> Dict[str, Any]:
     }
 
 
-def resolve_current_user(token: str) -> Dict[str, Any]:
-    client = get_supabase()
-
-    try:
-        user_res = client.auth.get_user(token)
-    except Exception as exc:
+def _fetch_supabase_auth_user(token: str) -> Dict[str, Any]:
+    """Validate user JWT via Supabase Auth API (reliable with service/anon key)."""
+    if not token or token.strip().lower() in ("", "null", "undefined"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail="Missing token. Please login again.",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    base_url = _require_env("SUPABASE_URL").rstrip("/")
+    apikey = os.getenv("SUPABASE_ANON_KEY") or _require_env("SUPABASE_SERVICE_ROLE_KEY")
+
+    try:
+        response = requests.get(
+            f"{base_url}/auth/v1/user",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "apikey": apikey,
+            },
+            timeout=15,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Cannot reach Supabase Auth: {exc}",
         ) from exc
 
-    if not user_res or not user_res.user:
+    if response.status_code == 401:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired or invalid. Sign out and login again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=(
+                "Invalid session token. Sign out, clear site data, and login again. "
+                f"(auth status {response.status_code})"
+            ),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    data = response.json()
+    if not data.get("id"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return data
+
+
+def resolve_current_user(token: str) -> Dict[str, Any]:
+    user_data = _fetch_supabase_auth_user(token)
+    user_id = user_data["id"]
 
     profile = fetch_one(
         "profiles",
         "id, full_name, role",
-        id=user_res.user.id,
+        id=user_id,
     )
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail=(
+                "Account exists in Auth but profile row is missing. "
+                "Re-register or ask admin to fix your account."
+            ),
             headers={"WWW-Authenticate": "Bearer"},
         )
 

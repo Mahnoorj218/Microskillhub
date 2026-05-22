@@ -34,28 +34,53 @@ PROFICIENCY_MAP = {"Beginner": 1, "Intermediate": 2, "Advanced": 3}
 async def health_check():
     key_role = None
     key_ok = True
+    admin_api_ok = None
     try:
         validate_service_role_key()
         key_role = jwt_key_role(os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""))
+        try:
+            get_supabase().auth.admin.list_users(page=1, per_page=1)
+            admin_api_ok = True
+        except Exception as exc:
+            admin_api_ok = False
+            key_ok = False
+            key_role = f"{key_role} (admin API: {exc})"
     except Exception as exc:
         key_ok = False
         key_role = str(exc)
     return {
-        "status": "ok" if key_ok else "misconfigured",
+        "status": "ok" if key_ok and admin_api_ok else "misconfigured",
         "frontend": FRONTEND_DIR.is_dir(),
         "supabase_key_role": key_role,
+        "admin_api_ok": admin_api_ok,
+        "hint": (
+            None
+            if key_ok and admin_api_ok
+            else "Set SUPABASE_SERVICE_ROLE_KEY to service_role secret from Supabase → Settings → API (not anon)."
+        ),
     }
 
 
 async def get_current_user(authorization: str = Header(...)) -> dict:
-    if not authorization.startswith("Bearer "):
+    if not authorization.lower().startswith("bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail="Missing Bearer token. Sign out and login again.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    token = authorization.split(" ", 1)[1]
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Empty token. Please sign out and login again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return resolve_current_user(token)
+
+
+@app.get("/api/auth/me")
+async def auth_me(current_user: dict = Depends(get_current_user)):
+    return current_user
 
 
 def _attach_required_skills(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -598,15 +623,21 @@ async def admin_create_student(
         )
     except Exception as exc:
         msg = str(exc)
-        if "not allowed" in msg.lower():
+        configured_role = jwt_key_role(os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""))
+        if "not allowed" in msg.lower() or "unauthorized" in msg.lower():
             raise HTTPException(
                 status_code=403,
                 detail=(
-                    "Supabase admin API blocked this request. "
-                    "Railway Variables mein SUPABASE_SERVICE_ROLE_KEY check karo — "
-                    "service_role secret hona chahiye, anon/public key nahi."
+                    "Supabase admin API blocked. "
+                    f"Configured key role: {configured_role or 'unknown'}. "
+                    "Supabase Dashboard → Project Settings → API → copy **service_role** (secret), "
+                    "not anon/public. Local: Backend/.env + server restart. "
+                    "Railway: Variables tab → SUPABASE_SERVICE_ROLE_KEY → Redeploy. "
+                    f"Check /api/health on this server. ({msg})"
                 ),
             ) from exc
+        if "already been registered" in msg.lower() or "already exists" in msg.lower():
+            raise HTTPException(status_code=400, detail="Email already registered") from exc
         raise HTTPException(status_code=400, detail=msg) from exc
 
     if not auth_res.user:

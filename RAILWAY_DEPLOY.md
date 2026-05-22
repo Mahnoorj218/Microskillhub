@@ -29,10 +29,33 @@ Repo root par `Dockerfile` + `railway.toml` hain.
 
 | Variable | Required |
 |----------|----------|
-| `SUPABASE_URL` | Yes |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes |
+| `SUPABASE_URL` | Yes — `https://xxxx.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes — **service_role** secret only |
 | `GEMINI_API_KEY` | Yes |
 | `CORS_ORIGINS` | `*` |
+
+### `SUPABASE_SERVICE_ROLE_KEY` — common mistake
+
+Supabase API page par **do** keys hain:
+
+| Key name | Use in Railway? |
+|----------|-----------------|
+| `anon` `public` | **NO** — is se "admin API blocked" / 403 aata hai |
+| `service_role` `secret` | **YES** — is variable mein yahi paste karo |
+
+Verify after deploy:
+
+`https://YOUR-APP.up.railway.app/api/health`
+
+```json
+{
+  "status": "ok",
+  "supabase_key_role": "service_role",
+  "admin_api_ok": true
+}
+```
+
+Agar `supabase_key_role` = `anon` ya `admin_api_ok` = `false` → galat key Variables mein hai → fix → **Redeploy**.
 
 ---
 

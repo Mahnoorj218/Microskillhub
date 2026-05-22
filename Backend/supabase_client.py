@@ -1,8 +1,6 @@
 import base64
 import json
 import os
-from functools import lru_cache
-
 from dotenv import load_dotenv
 from supabase import Client, create_client
 
@@ -41,7 +39,6 @@ def validate_service_role_key() -> None:
         )
 
 
-@lru_cache
 def get_supabase() -> Client:
     """Service-role client for trusted backend operations."""
     validate_service_role_key()
