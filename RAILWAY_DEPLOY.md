@@ -9,14 +9,17 @@ Railway image build is par **fail / timeout** ho jati hai.
 
 ---
 
-## Railway settings
+## Railway settings (IMPORTANT — updated)
 
 | Setting | Value |
 |---------|--------|
-| **Root Directory** | `Backend` |
-| **Start Command** | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
+| **Root Directory** | `/` (repo root — **khali** chhoro ya `.`) |
+| **Builder** | Dockerfile (auto from `railway.toml`) |
+| **Start Command** | *(khali — Dockerfile CMD use hoti hai)* |
 
-`Backend/railway.toml` auto-config ke liye repo mein hai.
+**Root Directory `Backend` mat rakho** — `Frontend/` folder alag hai; Docker image dono copy karti hai.
+
+Repo root par `Dockerfile` + `railway.toml` hain.
 
 ---
 

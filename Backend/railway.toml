@@ -1,8 +1,4 @@
-[build]
-builder = "nixpacks"
-buildCommand = "pip install -r requirements.txt"
-
+# Deprecated: use /railway.toml at repo root with Dockerfile builder.
+# If Railway Root Directory is "Backend", switch it to "/" (repo root).
 [deploy]
-startCommand = "uvicorn main:app --host 0.0.0.0 --port $PORT"
 healthcheckPath = "/api/health"
-restartPolicyType = "ON_FAILURE"

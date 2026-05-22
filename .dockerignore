@@ -1,0 +1,14 @@
+.git
+.gitignore
+**/.env
+**/.env.*
+!**/.env.example
+**/venv
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+.cursor
+*.md
+Backend/start.ps1
+terminals
