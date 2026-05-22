@@ -1,50 +1,48 @@
-import os
-import mysql.connector
-from mysql.connector import Error
-from dotenv import load_dotenv
+"""Supabase database helpers."""
 
-# Load environment variables from .env file
-load_dotenv()
+from typing import Any, Dict, List, Optional
 
-def get_db_connection():
-    """
-    Establishes and returns a connection to the MySQL database.
-    Autocommit is set to False to explicitly control transactions.
-    """
-    try:
-        connection = mysql.connector.connect(
-            host=os.getenv("DB_HOST", "localhost"),
-            user=os.getenv("DB_USER", "root"),
-            password=os.getenv("DB_PASSWORD", ""),
-            database=os.getenv("DB_NAME", "microskillhub"),
-            autocommit=False
-        )
-        return connection
-    except Error as e:
-        print(f"Error connecting to MySQL database: {e}")
-        raise e
+from supabase_client import get_supabase
 
-def get_db_cursor():
-    """
-    Establishes a connection and returns both the connection and a dictionary cursor.
-    The dictionary=True argument ensures that query results are returned as Python dictionaries.
-    """
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        return connection, cursor
-    except Error as e:
-        print(f"Error creating database cursor: {e}")
-        raise e
 
-def close_db(connection=None, cursor=None):
-    """
-    Safely closes the provided database cursor and connection.
-    """
-    try:
-        if cursor:
-            cursor.close()
-        if connection and connection.is_connected():
-            connection.close()
-    except Error as e:
-        print(f"Error while closing database resources: {e}")
+def _client():
+    return get_supabase()
+
+
+def fetch_all(table: str, select: str = "*", **filters) -> List[Dict[str, Any]]:
+    query = _client().table(table).select(select)
+    for key, value in filters.items():
+        query = query.eq(key, value)
+    response = query.execute()
+    return response.data or []
+
+
+def fetch_one(table: str, select: str = "*", **filters) -> Optional[Dict[str, Any]]:
+    rows = fetch_all(table, select, **filters)
+    return rows[0] if rows else None
+
+
+def insert_row(table: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    response = _client().table(table).insert(payload).execute()
+    if not response.data:
+        raise RuntimeError(f"Insert into {table} returned no data")
+    return response.data[0]
+
+
+def update_rows(table: str, payload: Dict[str, Any], **filters) -> None:
+    query = _client().table(table).update(payload)
+    for key, value in filters.items():
+        query = query.eq(key, value)
+    query.execute()
+
+
+def delete_rows(table: str, **filters) -> None:
+    query = _client().table(table).delete()
+    for key, value in filters.items():
+        query = query.eq(key, value)
+    query.execute()
+
+
+def rpc(function_name: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    response = _client().rpc(function_name, params or {}).execute()
+    return response.data or []

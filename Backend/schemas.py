@@ -22,6 +22,7 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     role: str
     name: str
+    user_id: str
 
 # ==========================================
 # Skill Models
@@ -63,7 +64,7 @@ class ChatResponse(BaseModel):
 class CreateTaskRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=150)
     description: str
-    difficulty: Literal["Easy", "Medium", "Hard"]
+    difficulty: Literal["Beginner", "Intermediate", "Advanced"]
     reward_xp: int = Field(..., gt=0)
     required_skills: List[int]  # List of skill IDs required for the task
 

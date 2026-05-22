@@ -1,4 +1,8 @@
 -- ============================================================================
+-- LEGACY: MySQL schema (deprecated)
+-- Use Supabase instead: ../supabase/migrations/001_initial.sql
+-- Setup guide: ../SUPABASE_SETUP.md
+-- ============================================================================
 -- Database: microskillhub
 -- Target: MySQL / phpMyAdmin Import
 -- ============================================================================

@@ -4,8 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Aapki active verified API key
-GEMINI_API_KEY = "AIzaSyBVzEioG9HjsltWOYoFS3zQhQuA-3UKkaM"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 async def get_ai_career_advice(user_message: str, user_skills: list) -> str:
     """

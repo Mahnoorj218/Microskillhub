@@ -1,0 +1,51 @@
+# Python
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Database (local)
+*.sqlite3
+*.db
+
+# Logs
+*.log
+logs/
+
+# Frontend (if Node/React added later)
+node_modules/
+.npm
+.next/
+out/
+
+# IDE & editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Cursor (local agent/cache)
+.cursor/
