@@ -150,7 +150,7 @@
       flex-direction: column;
       gap: 0.4rem;
     }
-    .form-group input, .form-group select {
+    .form-group input, .form-group select, .form-group textarea {
       padding: 0.75rem;
       background-color: #0b0c13;
       border: 1px solid var(--border-color);
@@ -158,7 +158,7 @@
       color: var(--text-main);
       font-size: 1rem;
     }
-    .form-group input:focus { border-color: var(--purple); outline: none; }
+    .form-group input:focus, .form-group textarea:focus { border-color: var(--purple); outline: none; }
 
     /* Skill Progression Track Bar */
     .skill-progress-item { margin-bottom: 1rem; }
@@ -198,6 +198,21 @@
     .chat-bubble { display: flex; gap: 0.5rem; max-width: 80%; padding: 0.75rem 1rem; border-radius: 12px; }
     .user-msg { background: var(--purple); align-self: flex-end; border-bottom-right-radius: 0; }
     .ai-msg { background: var(--bg-card); border: 1px solid var(--border-color); align-self: flex-start; border-bottom-left-radius: 0; }
+
+    /* Custom Code Block Preview for Admin Audit Panel */
+    .code-preview-box {
+      background: #0b0c13;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 0.75rem;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.85rem;
+      color: #00ffc4;
+      white-space: pre-wrap;
+      max-height: 150px;
+      overflow-y: auto;
+      max-width: 350px;
+    }
   </style>
 </head>
 <body>
@@ -278,15 +293,11 @@
             <input type="email" id="reg-email" required placeholder="john.doe@university.edu">
           </div>
           
-          <div class="form-group" style="position: relative;">
+          <div class="form-group">
             <label>Password</label>
             <div style="display: flex; gap: 5px;">
               <input type="password" id="reg-password" required placeholder="Create strong password" style="flex: 1;">
               <button type="button" id="toggle-reg-password" class="btn btn-outline btn-sm">👁️ Show</button>
-            </div>
-            <div id="password-strength-wrapper" style="margin-top: 5px; display: none;">
-              <div id="strength-bar" style="height: 5px; width: 0%; background-color: var(--red); transition: all 0.3s ease; border-radius: 3px;"></div>
-              <small id="strength-text" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; display: block;"></small>
             </div>
           </div>
 
@@ -366,7 +377,7 @@
         <h3 style="margin-bottom: 1rem;">Add New Skill Metric</h3>
         <form id="form-add-skill" style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; align-items: flex-end;">
           <div class="form-group" style="margin-bottom:0;">
-            <label>Select Skill Category</label>
+            <label>Select Skill</label>
             <select id="new-skill-category" required></select>
           </div>
           <div class="form-group" style="margin-bottom:0;">
@@ -386,21 +397,47 @@
     </section>
 
     <section id="section-tasks" style="display: none;">
-      <h2>Open Tasks Repository</h2>
-      <p class="text-muted">Accept codebase tasks, solve system bugs, and submit work to earn validation XP points.</p>
+  <h2>Open Tasks Repository</h2>
+  <p class="text-muted">Accept codebase tasks, solve system bugs, and paste code directly to earn validation XP points.</p>
 
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; gap: 1rem; flex-wrap: wrap;">
-        <input type="text" id="task-search-input" placeholder="Filter tasks by name..." style="padding: 0.6rem 1rem; width: 300px; background: var(--bg-card); border:1px solid var(--border-color); border-radius:6px; color:#fff;">
-        <div class="filter-chips-row">
-          <div class="chip active">All difficulties</div>
-          <div class="chip">Beginner</div>
-          <div class="chip">Intermediate</div>
-          <div class="chip">Advanced</div>
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; gap: 1rem; flex-wrap: wrap;">
+    <input type="text" id="task-search-input" placeholder="Filter tasks by name..." style="padding: 0.6rem 1rem; width: 300px; background: var(--bg-card); border:1px solid var(--border-color); border-radius:6px; color:#fff;">
+    <div class="filter-chips-row" id="difficulty-chips">
+      <div class="chip active" data-filter="all">All difficulties</div>
+      <div class="chip" data-filter="Beginner">Beginner</div>
+      <div class="chip" data-filter="Intermediate">Intermediate</div>
+      <div class="chip" data-filter="Advanced">Advanced</div>
+    </div>
+  </div>
+
+  <div id="testing-submission-workspace" class="glass-card" style="display: none; margin-top: 1.5rem; border: 1px solid var(--purple);">
+     <h3 style="color: var(--purple); margin-bottom: 0.5rem; display: flex; justify-content: space-between;">
+       <span>🚀 Code Validator & Testing Sandbox</span>
+       <button class="btn btn-outline btn-sm" onclick="document.getElementById('testing-submission-workspace').style.display='none'">✕ Close</button>
+     </h3>
+     <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Real-time Analysis: Code paste karte hi system automatic syntax check karega.</p>
+     
+     <form id="form-testing-submission">
+        <input type="hidden" id="submit-task-app-id">
+        <div class="form-group">
+           <label><b>Paste Workspace Artifacts / Project Code</b></label>
+           <textarea id="submit-raw-code" rows="10" required oninput="validateCodeSyntaxLive()" placeholder="/* Paste your JavaScript or Code scripts here... */&#10;function checkSystem() {&#10;   console.log('Valid syntax structure');&#10;}" style="font-family: 'Courier New', Courier, monospace; background: #07080d; color: #a5d6a7; border-color: var(--border-color);"></textarea>
         </div>
-      </div>
 
-      <div id="tasks-cards-container" class="tasks-grid"></div>
-    </section>
+        <div id="sandbox-compiler-console" style="padding: 0.75rem; border-radius: 6px; margin-bottom: 1.2rem; font-family: monospace; font-size: 0.9rem; display: none;">
+           <strong id="console-status-title">System Status:</strong>
+           <p id="console-error-details" style="margin-top: 4px; font-weight: 500;"></p>
+        </div>
+
+        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+           <button type="button" class="btn btn-outline" onclick="document.getElementById('testing-submission-workspace').style.display='none'">Cancel</button>
+           <button type="submit" id="btn-dispatch-code" class="btn btn-success">Dispatch Code to Evaluation Queue</button>
+        </div>
+     </form>
+  </div>
+
+  <div id="tasks-cards-container" class="tasks-grid"></div>
+</section>
 
     <section id="section-leaderboard" style="display: none;">
       <h2>🏆 Global Engineering Leaderboard</h2>
@@ -442,24 +479,55 @@
       <p class="text-muted">Review student work submissions, audit workspace setups, and manage master project blueprints.</p>
       
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin: 1.5rem 0;">
-        <div class="glass-card" style="padding:1.2rem; border-left:4px solid var(--purple);"><span style="font-size:0.85rem; color:var(--text-muted);">Active Registered Students</span><h2 class="stat-val" style="margin-top:5px; color:var(--text-main);">0</h2></div>
-        <div class="glass-card" style="padding:1.2rem; border-left:4px solid var(--amber);"><span style="font-size:0.85rem; color:var(--text-muted);">Pending Submissions Audit</span><h2 class="stat-val" style="margin-top:5px; color:var(--amber);">0</h2></div>
-        <div class="glass-card" style="padding:1.2rem; border-left:4px solid var(--teal);"><span style="font-size:0.85rem; color:var(--text-muted);">Total Sprint Tasks Approved</span><h2 class="stat-val" style="margin-top:5px; color:var(--teal);">0</h2></div>
+        <div class="glass-card" style="padding:1.2rem; border-left:4px solid var(--purple);"><span style="font-size:0.85rem; color:var(--text-muted);">Active Registered Students</span><h2 class="stat-val" id="admin-stat-students" style="margin-top:5px; color:var(--text-main);">0</h2></div>
+        <div class="glass-card" style="padding:1.2rem; border-left:4px solid var(--amber);"><span style="font-size:0.85rem; color:var(--text-muted);">Pending Submissions Audit</span><h2 class="stat-val" id="admin-stat-pending" style="margin-top:5px; color:var(--amber);">0</h2></div>
+        <div class="glass-card" style="padding:1.2rem; border-left:4px solid var(--teal);"><span style="font-size:0.85rem; color:var(--text-muted);">Total Active Tasks</span><h2 class="stat-val" id="admin-stat-tasks" style="margin-top:5px; color:var(--teal);">0</h2></div>
+      </div>
+
+      <div class="glass-card" style="margin-bottom: 2rem;">
+         <h3>Create New Master Task Blueprint</h3>
+         <form id="form-admin-create-task" style="margin-top:1rem; display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+            <div class="form-group" style="grid-column: span 2;">
+               <label>Task Title</label>
+               <input type="text" id="admin-task-title" required placeholder="e.g., Integrate Redis Token Store Layer">
+            </div>
+            <div class="form-group" style="grid-column: span 2;">
+               <label>Task Description Specification</label>
+               <input type="text" id="admin-task-desc" required placeholder="Detailed engineering instructions for execution workflow...">
+            </div>
+            <div class="form-group">
+               <label>Difficulty Tier</label>
+               <select id="admin-task-diff">
+                  <option value="Beginner">Beginner</option>
+                  <option value="Intermediate">Intermediate</option>
+                  <option value="Advanced">Advanced</option>
+               </select>
+            </div>
+            <div class="form-group">
+               <label>Reward Metric (XP Amount)</label>
+               <input type="number" id="admin-task-xp" required value="150" min="10">
+            </div>
+            <div class="form-group" style="grid-column: span 2;">
+               <label>Core Target Required Skill Mapping Identifier</label>
+               <select id="admin-task-skill-select"></select>
+            </div>
+            <button type="submit" class="btn btn-purple" style="grid-column: span 2; height:45px;">Deploy Task Blueprint</button>
+         </form>
       </div>
 
       <div class="admin-data-section" style="margin-top: 2rem;">
         <h3>System Task Management Core</h3>
         <table style="width: 100%; border-collapse: collapse; margin-top: 1rem; text-align: left; background: var(--bg-card); border-radius: 8px; border: 1px solid var(--border-color);">
           <thead><tr style="border-bottom:1px solid var(--border-color); background: #0b0c13; color: var(--text-muted);"><th style="padding:10px;">ID Key</th><th style="padding:10px;">Task Title</th><th style="padding:10px;">Difficulty</th><th style="padding:10px;">XP Value</th><th style="padding:10px;">Actions</th></tr></thead>
-          <tbody></tbody>
+          <tbody id="admin-tasks-tbody"></tbody>
         </table>
       </div>
 
       <div class="admin-data-section" style="margin-top: 2rem;">
         <h3>Pending Student Work Submissions Audit Queue</h3>
         <table style="width: 100%; border-collapse: collapse; margin-top: 1rem; text-align: left; background: var(--bg-card); border-radius: 8px; border: 1px solid var(--border-color);">
-          <thead><tr style="border-bottom:1px solid var(--border-color); background: #0b0c13; color: var(--text-muted);"><th style="padding:10px;">Student Email</th><th style="padding:10px;">Task Title</th><th style="padding:10px;">Submission Asset Link</th><th style="padding:10px;">Review Decision Actions</th></tr></thead>
-          <tbody></tbody>
+          <thead><tr style="border-bottom:1px solid var(--border-color); background: #0b0c13; color: var(--text-muted);"><th style="padding:10px;">Student Email</th><th style="padding:10px;">Task Title</th><th style="padding:10px;">Submitted Code Block Artifact</th><th style="padding:10px;">Review Decision Actions</th></tr></thead>
+          <tbody id="admin-submissions-tbody"></tbody>
         </table>
       </div>
     </section>
