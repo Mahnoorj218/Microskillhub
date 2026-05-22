@@ -11,7 +11,7 @@ import schemas as models
 from ai_service import get_ai_career_advice
 from auth_supabase import resolve_current_user, sign_in_user, sign_up_user
 from db import delete_rows, fetch_all, fetch_one, insert_row, rpc, update_rows
-from supabase_client import get_supabase
+from supabase_client import get_supabase, jwt_key_role, validate_service_role_key
 
 load_dotenv()
 
@@ -32,7 +32,19 @@ PROFICIENCY_MAP = {"Beginner": 1, "Intermediate": 2, "Advanced": 3}
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "frontend": FRONTEND_DIR.is_dir()}
+    key_role = None
+    key_ok = True
+    try:
+        validate_service_role_key()
+        key_role = jwt_key_role(os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""))
+    except Exception as exc:
+        key_ok = False
+        key_role = str(exc)
+    return {
+        "status": "ok" if key_ok else "misconfigured",
+        "frontend": FRONTEND_DIR.is_dir(),
+        "supabase_key_role": key_role,
+    }
 
 
 async def get_current_user(authorization: str = Header(...)) -> dict:
@@ -585,21 +597,38 @@ async def admin_create_student(
             }
         )
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        msg = str(exc)
+        if "not allowed" in msg.lower():
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Supabase admin API blocked this request. "
+                    "Railway Variables mein SUPABASE_SERVICE_ROLE_KEY check karo — "
+                    "service_role secret hona chahiye, anon/public key nahi."
+                ),
+            ) from exc
+        raise HTTPException(status_code=400, detail=msg) from exc
 
     if not auth_res.user:
         raise HTTPException(status_code=400, detail="Failed to create student account")
 
-    insert_row(
-        "profiles",
-        {
-            "id": auth_res.user.id,
-            "full_name": payload.full_name,
-            "email": payload.email,
-            "role": "student",
-            "roll_number": payload.roll_number,
-        },
-    )
+    try:
+        insert_row(
+            "profiles",
+            {
+                "id": auth_res.user.id,
+                "full_name": payload.full_name,
+                "email": payload.email,
+                "role": "student",
+                "roll_number": payload.roll_number,
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Auth user created but profile insert failed: {exc}",
+        ) from exc
+
     return {"success": True, "message": "Student account created", "user_id": auth_res.user.id}
 
 
