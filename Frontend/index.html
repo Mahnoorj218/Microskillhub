@@ -77,6 +77,24 @@
 
     .auth-only { display: none; }
 
+    .nav-links a.nav-active {
+      color: var(--amber) !important;
+      font-weight: 700;
+    }
+
+    .code-preview-box {
+      max-height: 120px;
+      overflow: auto;
+      background: #0b0c13;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px;
+      font-family: monospace;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      color: var(--text-muted);
+    }
+
     /* Layout Elements */
     main.spa-content {
       flex: 1;
@@ -226,11 +244,11 @@
       </div>
       
       <div id="auth-logged-in" style="display: none; align-items: center; gap: 1.5rem;">
-        <a href="#" onclick="navigateTo('section-dashboard')">Dashboard</a>
-        <a href="#" onclick="navigateTo('section-skills')">Skills Manager</a>
-        <a href="#" onclick="navigateTo('section-tasks')">Available Tasks</a>
-        <a href="#" onclick="navigateTo('section-leaderboard')">🏆 Leaderboard</a>
-        <a href="#" onclick="navigateTo('section-ai')">SkillCopilot AI</a>
+        <a href="#" id="nav-dashboard" onclick="navigateTo('section-dashboard')">Dashboard</a>
+        <a href="#" id="nav-skills" onclick="navigateTo('section-skills')">Skills Manager</a>
+        <a href="#" id="nav-tasks" onclick="navigateTo('section-tasks')">Available Tasks</a>
+        <a href="#" id="nav-leaderboard" onclick="navigateTo('section-leaderboard')">🏆 Leaderboard</a>
+        <a href="#" id="nav-ai" onclick="navigateTo('section-ai')">SkillCopilot AI</a>
         <a href="#" id="nav-admin" onclick="navigateTo('section-admin')" style="display:none; color: var(--amber); font-weight: bold;">Admin Console</a>
         <span id="user-display-name" style="color: var(--teal); font-size: 0.9rem; font-weight: 600;"></span>
         <button id="btn-logout" class="btn btn-outline btn-sm">Sign Out</button>
@@ -476,8 +494,39 @@
 
     <section id="section-admin" style="display: none;">
       <h2>Administrative Control Dashboard</h2>
-      <p class="text-muted">Review student work submissions, audit workspace setups, and manage master project blueprints.</p>
+      <p class="text-muted">Manage students, upgrade tasks, and review submitted student work.</p>
       
+      <div class="glass-card" style="margin: 1.5rem 0;">
+        <h3>Register New Student</h3>
+        <form id="form-admin-add-student" style="margin-top:1rem; display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="admin-student-name" required placeholder="Student full name">
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="admin-student-email" required placeholder="student@university.edu">
+          </div>
+          <div class="form-group">
+            <label>Roll Number</label>
+            <input type="text" id="admin-student-roll" required placeholder="SE-1234">
+          </div>
+          <div class="form-group">
+            <label>Temporary Password</label>
+            <input type="password" id="admin-student-password" required minlength="6" placeholder="Min 6 characters">
+          </div>
+          <button type="submit" class="btn btn-purple" style="grid-column: span 2;">Add Student Account</button>
+        </form>
+      </div>
+
+      <div class="admin-data-section">
+        <h3>Registered Students</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 1rem; text-align: left; background: var(--bg-card); border-radius: 8px; border: 1px solid var(--border-color);">
+          <thead><tr style="border-bottom:1px solid var(--border-color); background: #0b0c13; color: var(--text-muted);"><th style="padding:10px;">Name</th><th style="padding:10px;">Email</th><th style="padding:10px;">Roll #</th><th style="padding:10px;">Skills</th><th style="padding:10px;">Total XP</th></tr></thead>
+          <tbody id="admin-students-tbody"></tbody>
+        </table>
+      </div>
+
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin: 1.5rem 0;">
         <div class="glass-card" style="padding:1.2rem; border-left:4px solid var(--purple);"><span style="font-size:0.85rem; color:var(--text-muted);">Active Registered Students</span><h2 class="stat-val" id="admin-stat-students" style="margin-top:5px; color:var(--text-main);">0</h2></div>
         <div class="glass-card" style="padding:1.2rem; border-left:4px solid var(--amber);"><span style="font-size:0.85rem; color:var(--text-muted);">Pending Submissions Audit</span><h2 class="stat-val" id="admin-stat-pending" style="margin-top:5px; color:var(--amber);">0</h2></div>
@@ -515,11 +564,59 @@
          </form>
       </div>
 
+      <div id="admin-task-upgrade-panel" class="glass-card" style="margin-bottom: 2rem; display: none; border: 1px solid var(--amber);">
+        <h3 style="color: var(--amber);">Upgrade / Edit Task</h3>
+        <form id="form-admin-upgrade-task" style="margin-top:1rem; display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+          <input type="hidden" id="admin-edit-task-id">
+          <div class="form-group" style="grid-column: span 2;">
+            <label>Task Title</label>
+            <input type="text" id="admin-edit-task-title" required>
+          </div>
+          <div class="form-group" style="grid-column: span 2;">
+            <label>Description</label>
+            <input type="text" id="admin-edit-task-desc" required>
+          </div>
+          <div class="form-group">
+            <label>Difficulty</label>
+            <select id="admin-edit-task-diff">
+              <option value="Beginner">Beginner</option>
+              <option value="Intermediate">Intermediate</option>
+              <option value="Advanced">Advanced</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>XP Reward</label>
+            <input type="number" id="admin-edit-task-xp" required min="10">
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="admin-edit-task-status">
+              <option value="active">Active</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Required Skill</label>
+            <select id="admin-edit-task-skill-select"></select>
+          </div>
+          <button type="submit" class="btn btn-purple" style="grid-column: span 2;">Save Task Upgrade</button>
+          <button type="button" class="btn btn-outline" style="grid-column: span 2;" onclick="closeTaskUpgradePanel()">Cancel</button>
+        </form>
+      </div>
+
       <div class="admin-data-section" style="margin-top: 2rem;">
         <h3>System Task Management Core</h3>
         <table style="width: 100%; border-collapse: collapse; margin-top: 1rem; text-align: left; background: var(--bg-card); border-radius: 8px; border: 1px solid var(--border-color);">
           <thead><tr style="border-bottom:1px solid var(--border-color); background: #0b0c13; color: var(--text-muted);"><th style="padding:10px;">ID Key</th><th style="padding:10px;">Task Title</th><th style="padding:10px;">Difficulty</th><th style="padding:10px;">XP Value</th><th style="padding:10px;">Actions</th></tr></thead>
           <tbody id="admin-tasks-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="admin-data-section" style="margin-top: 2rem;">
+        <h3>All Student Task Submissions</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 1rem; text-align: left; background: var(--bg-card); border-radius: 8px; border: 1px solid var(--border-color);">
+          <thead><tr style="border-bottom:1px solid var(--border-color); background: #0b0c13; color: var(--text-muted);"><th style="padding:10px;">Student</th><th style="padding:10px;">Task</th><th style="padding:10px;">Status</th><th style="padding:10px;">Submission</th><th style="padding:10px;">Review</th></tr></thead>
+          <tbody id="admin-all-apps-tbody"></tbody>
         </table>
       </div>
 

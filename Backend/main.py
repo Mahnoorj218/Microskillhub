@@ -51,12 +51,13 @@ def _attach_required_skills(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     for task in tasks:
         req = (
             client.table("task_required_skills")
-            .select("required_level, skills(skill_name)")
+            .select("skill_id, required_level, skills(skill_name)")
             .eq("task_id", task["task_id"])
             .execute()
         )
         task["required_skills"] = [
             {
+                "skill_id": row["skill_id"],
                 "skill_name": row["skills"]["skill_name"],
                 "required_level": row["required_level"],
             }
@@ -556,6 +557,124 @@ async def get_all_users_reporting(current_user: dict = Depends(get_current_user)
         )
 
     return results
+
+
+@app.post("/api/admin/create-student", status_code=status.HTTP_201_CREATED)
+async def admin_create_student(
+    payload: models.AdminCreateStudentRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
+
+    if fetch_one("profiles", "id", email=payload.email):
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    client = get_supabase()
+    try:
+        auth_res = client.auth.admin.create_user(
+            {
+                "email": payload.email,
+                "password": payload.password,
+                "email_confirm": True,
+                "user_metadata": {
+                    "full_name": payload.full_name,
+                    "role": "student",
+                    "roll_number": payload.roll_number,
+                },
+            }
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not auth_res.user:
+        raise HTTPException(status_code=400, detail="Failed to create student account")
+
+    insert_row(
+        "profiles",
+        {
+            "id": auth_res.user.id,
+            "full_name": payload.full_name,
+            "email": payload.email,
+            "role": "student",
+            "roll_number": payload.roll_number,
+        },
+    )
+    return {"success": True, "message": "Student account created", "user_id": auth_res.user.id}
+
+
+@app.put("/api/admin/update-task/{task_id}")
+async def admin_update_task(
+    task_id: int,
+    payload: models.UpdateTaskRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
+
+    if not fetch_one("tasks", "task_id", task_id=task_id):
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    update_rows(
+        "tasks",
+        {
+            "title": payload.title,
+            "description": payload.description,
+            "difficulty": payload.difficulty,
+            "reward_xp": payload.reward_xp,
+            "status": payload.status,
+        },
+        task_id=task_id,
+    )
+
+    delete_rows("task_required_skills", task_id=task_id)
+    for skill_id in payload.required_skills:
+        insert_row(
+            "task_required_skills",
+            {
+                "task_id": task_id,
+                "skill_id": skill_id,
+                "required_level": "Intermediate",
+            },
+        )
+
+    return {"success": True, "message": "Task updated successfully", "task_id": task_id}
+
+
+@app.get("/api/admin/all-applications")
+async def admin_all_applications(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
+
+    client = get_supabase()
+    response = (
+        client.table("applications")
+        .select(
+            "app_id, status, submission_text, applied_at, reviewed_at, "
+            "profiles(full_name, email), tasks(title, difficulty, reward_xp)"
+        )
+        .order("applied_at", desc=True)
+        .execute()
+    )
+
+    rows = []
+    for item in response.data or []:
+        profile = item.get("profiles") or {}
+        task = item.get("tasks") or {}
+        rows.append(
+            {
+                "app_id": item["app_id"],
+                "status": item["status"],
+                "submission_text": item["submission_text"],
+                "applied_at": item["applied_at"],
+                "student_name": profile.get("full_name"),
+                "student_email": profile.get("email"),
+                "task_title": task.get("title"),
+                "task_difficulty": task.get("difficulty"),
+                "reward_xp": task.get("reward_xp"),
+            }
+        )
+    return rows
 
 
 # ---------------------------------------------------------------------------

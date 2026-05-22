@@ -71,3 +71,19 @@ class CreateTaskRequest(BaseModel):
 class ReviewRequest(BaseModel):
     app_id: int
     action: Literal["approve", "reject"]
+
+
+class AdminCreateStudentRequest(BaseModel):
+    full_name: str = Field(..., min_length=1, max_length=100)
+    email: EmailStr
+    password: str = Field(..., min_length=6)
+    roll_number: str = Field(..., min_length=1, max_length=50)
+
+
+class UpdateTaskRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=150)
+    description: str
+    difficulty: Literal["Beginner", "Intermediate", "Advanced"]
+    reward_xp: int = Field(..., gt=0)
+    status: Literal["active", "closed"] = "active"
+    required_skills: List[int]

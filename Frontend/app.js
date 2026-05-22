@@ -16,19 +16,57 @@ document.addEventListener("DOMContentLoaded", () => {
 // ==========================================================================
 // ROUTING & NAVIGATION FRAMEWORK
 // ==========================================================================
-function navigateTo(sectionId) {
-    // Hide all view screens
-    const sections = document.querySelectorAll("main.spa-content > section");
-    sections.forEach(sec => sec.style.display = "none");
+const STUDENT_ONLY_SECTIONS = [
+    "section-dashboard",
+    "section-skills",
+    "section-tasks",
+    "section-ai",
+];
 
-    // Enable visibility for targeted view
+let adminTasksCache = [];
+
+function applyRoleBasedNav() {
+    const role = localStorage.getItem("role");
+    const isAdmin = role === "admin";
+
+    const studentNavIds = ["nav-dashboard", "nav-skills", "nav-tasks", "nav-ai"];
+    studentNavIds.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = isAdmin ? "none" : "inline-block";
+    });
+
+    const navAdmin = document.getElementById("nav-admin");
+    if (navAdmin) navAdmin.style.display = isAdmin ? "inline-block" : "none";
+
+    const navLeaderboard = document.getElementById("nav-leaderboard");
+    if (navLeaderboard) navLeaderboard.style.display = "inline-block";
+}
+
+function navigateTo(sectionId) {
+    const role = localStorage.getItem("role");
+
+    if (role === "admin") {
+        if (STUDENT_ONLY_SECTIONS.includes(sectionId)) {
+            sectionId = "section-admin";
+        }
+        if (sectionId === "section-leaderboard") {
+            sectionId = "section-admin";
+        }
+    }
+
+    const sections = document.querySelectorAll("main.spa-content > section");
+    sections.forEach((sec) => (sec.style.display = "none"));
+
     const activeSection = document.getElementById(sectionId);
     if (activeSection) {
         activeSection.style.display = "block";
         currentView = sectionId;
+        window.location.hash = sectionId;
     }
 
-    // Trigger data fetch pipelines based on current views mapping
+    document.querySelectorAll(".nav-links a").forEach((link) => link.classList.remove("nav-active"));
+    if (sectionId === "section-admin") document.getElementById("nav-admin")?.classList.add("nav-active");
+
     if (sectionId === "section-dashboard") loadDashboardData();
     if (sectionId === "section-skills") loadSkillsManagerData();
     if (sectionId === "section-tasks") loadAvailableTasks();
@@ -75,13 +113,13 @@ function checkExistingAuth() {
         document.getElementById("auth-logged-out").style.display = "none";
         document.getElementById("auth-logged-in").style.display = "flex";
         document.getElementById("user-display-name").textContent = `👤 ${name}`;
-        
+        applyRoleBasedNav();
+
         if (role === "admin") {
-            document.getElementById("nav-admin").style.display = "inline-block";
+            navigateTo("section-admin");
         } else {
-            document.getElementById("nav-admin").style.display = "none";
+            navigateTo("section-dashboard");
         }
-        navigateTo("section-dashboard");
     } else {
         performClientSignout();
     }
@@ -91,7 +129,7 @@ function performClientSignout() {
     localStorage.clear();
     document.getElementById("auth-logged-out").style.display = "flex";
     document.getElementById("auth-logged-in").style.display = "none";
-    document.getElementById("nav-admin").style.display = "none";
+    applyRoleBasedNav();
     navigateTo("section-home");
 }
 
@@ -124,8 +162,9 @@ function setupFormListeners() {
                 localStorage.setItem("token", data.access_token);
                 localStorage.setItem("role", data.role);
                 localStorage.setItem("name", data.name);
-                localStorage.setItem("user_id", data.user_id);
+                localStorage.setItem("user_id", data.user_id || "");
                 showToast("Authenticated successfully. Welcome!");
+                applyRoleBasedNav();
                 checkExistingAuth();
             } else {
                 showToast(data.detail || "Authentication mapping failure.", "error");
@@ -314,6 +353,80 @@ function setupFormListeners() {
             }
         } catch {
             showToast("Deployment pipeline fault block.", "error");
+        } finally {
+            toggleSpinner(false);
+        }
+    });
+
+    document.getElementById("form-admin-add-student").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        toggleSpinner(true);
+        const payload = {
+            full_name: document.getElementById("admin-student-name").value.trim(),
+            email: document.getElementById("admin-student-email").value.trim(),
+            roll_number: document.getElementById("admin-student-roll").value.trim(),
+            password: document.getElementById("admin-student-password").value,
+        };
+        try {
+            const res = await fetch(`${API_BASE_URL}/admin/create-student`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${localStorage.getItem("token")}`,
+                },
+                body: JSON.stringify(payload),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast("Student account created successfully.");
+                e.target.reset();
+                loadAdminConsoleData();
+            } else {
+                showToast(data.detail || "Could not create student.", "error");
+            }
+        } catch {
+            showToast("Server error while creating student.", "error");
+        } finally {
+            toggleSpinner(false);
+        }
+    });
+
+    document.getElementById("form-admin-upgrade-task").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const taskId = document.getElementById("admin-edit-task-id").value;
+        if (!taskId) return;
+
+        toggleSpinner(true);
+        const payload = {
+            title: document.getElementById("admin-edit-task-title").value.trim(),
+            description: document.getElementById("admin-edit-task-desc").value.trim(),
+            difficulty: document.getElementById("admin-edit-task-diff").value,
+            reward_xp: parseInt(document.getElementById("admin-edit-task-xp").value, 10),
+            status: document.getElementById("admin-edit-task-status").value,
+            required_skills: [
+                parseInt(document.getElementById("admin-edit-task-skill-select").value, 10),
+            ],
+        };
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/admin/update-task/${taskId}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${localStorage.getItem("token")}`,
+                },
+                body: JSON.stringify(payload),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast("Task upgraded successfully.");
+                closeTaskUpgradePanel();
+                loadAdminConsoleData();
+            } else {
+                showToast(data.detail || "Task update failed.", "error");
+            }
+        } catch {
+            showToast("Server error while updating task.", "error");
         } finally {
             toggleSpinner(false);
         }
@@ -645,70 +758,107 @@ function appendChatBubble(text, className) {
 async function loadAdminConsoleData() {
     if (localStorage.getItem("role") !== "admin") return;
 
+    const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+
     try {
-        // Dropdown skill selection initialization inside system admin task creator panel container
         const resAllSk = await fetch(`${API_BASE_URL}/skills/all`);
-        const allSk = await resAllSk.json();
-        const adminDropdown = document.getElementById("admin-task-skill-select");
-        adminDropdown.innerHTML = "";
-        allSk.forEach(s => {
-            adminDropdown.innerHTML += `<option value="${s.skill_id}">${s.skill_name} [${s.category}]</option>`;
+        const allSk = resAllSk.ok ? await resAllSk.json() : [];
+        const skillOptions = allSk
+            .map((s) => `<option value="${s.skill_id}">${s.skill_name} [${s.category}]</option>`)
+            .join("");
+
+        ["admin-task-skill-select", "admin-edit-task-skill-select"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = skillOptions;
         });
 
-        // Load system state counters metrics panels rows values indices positions completely
-        const resStats = await fetch(`${API_BASE_URL}/admin/stats`, {
-            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
-        });
-        const stats = await resStats.json();
+        const resStats = await fetch(`${API_BASE_URL}/admin/stats`, { headers });
+        const stats = resStats.ok ? await resStats.json() : {};
         document.getElementById("admin-stat-students").textContent = stats.students || 0;
         document.getElementById("admin-stat-pending").textContent = stats.pending || 0;
         document.getElementById("admin-stat-tasks").textContent = stats.tasks || 0;
 
-        // Fetch blueprints list layout rows setup tracking components
-        const resTasks = await fetch(`${API_BASE_URL}/tasks/all`, {
-            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
-        });
-        const tasks = await resTasks.json();
+        const resStudents = await fetch(`${API_BASE_URL}/admin/users`, { headers });
+        const students = resStudents.ok ? await resStudents.json() : [];
+        const studentsTbody = document.getElementById("admin-students-tbody");
+        studentsTbody.innerHTML = students.length
+            ? students
+                  .map(
+                      (s) => `
+               <tr style="border-bottom:1px solid var(--border-color)">
+                  <td style="padding:10px; color:#fff">${s.full_name}</td>
+                  <td style="padding:10px; color:var(--purple)">${s.email}</td>
+                  <td style="padding:10px;">${s.roll_number || "-"}</td>
+                  <td style="padding:10px;">${s.skill_count}</td>
+                  <td style="padding:10px; color:var(--teal)">${s.total_xp} XP</td>
+               </tr>`
+                  )
+                  .join("")
+            : `<tr><td colspan="5" style="padding:15px; text-align:center; color:var(--text-muted)">No students registered yet.</td></tr>`;
+
+        const resTasks = await fetch(`${API_BASE_URL}/tasks/all`, { headers });
+        adminTasksCache = resTasks.ok ? await resTasks.json() : [];
         const tasksTbody = document.getElementById("admin-tasks-tbody");
-        tasksTbody.innerHTML = "";
-        tasks.forEach(t => {
-            tasksTbody.innerHTML += `
+        tasksTbody.innerHTML = adminTasksCache.length
+            ? adminTasksCache
+                  .map(
+                      (t) => `
                <tr style="border-bottom:1px solid var(--border-color)">
                   <td style="padding:10px; color:var(--text-muted)">#${t.task_id}</td>
                   <td style="padding:10px; font-weight:600; color:#fff">${t.title}</td>
                   <td style="padding:10px;"><span class="badge badge-success">${t.difficulty}</span></td>
                   <td style="padding:10px; color:var(--teal)">${t.reward_xp} XP</td>
-                  <td style="padding:10px;"><button class="btn btn-danger btn-sm" onclick="purgeTaskBlueprintByAdmin(${t.task_id})">Delete Blueprint</button></td>
-               </tr>`;
-        });
-
-        // FIXED: Display raw code block artifacts directly inside admin audit panel dashboard grids rows elements list view 
-        const resSubs = await fetch(`${API_BASE_URL}/admin/submissions`, {
-            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
-        });
-        const subs = await resSubs.json();
-        const subsTbody = document.getElementById("admin-submissions-tbody");
-        subsTbody.innerHTML = "";
-
-        if (subs.length === 0) {
-            subsTbody.innerHTML = `<tr><td colspan="4" style="padding:15px; text-align:center; color:var(--text-muted)">Submission evaluation queue register is currently empty.</td></tr>`;
-            return;
-        }
-
-        subs.forEach(sub => {
-            // Escape code elements block structures text characters string elements strings arrays safely to block browser scripts parsing execution
-            const safeCodeSnippet = (sub.submission_text || "/* Empty Code Element Body */")
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;");
-
-            subsTbody.innerHTML += `
-               <tr style="border-bottom:1px solid var(--border-color)">
-                  <td style="padding:10px; color:var(--purple)"><b>${sub.student_email}</b><br><small style="color:var(--text-muted)">${sub.student_name || 'Student'}</small></td>
-                  <td style="padding:10px; color:#fff">${sub.task_title}</td>
                   <td style="padding:10px;">
-                     <div class="code-preview-box">${safeCodeSnippet}</div>
+                     <button class="btn btn-outline btn-sm" onclick="openTaskUpgradePanel(${t.task_id})">Upgrade</button>
+                     <button class="btn btn-danger btn-sm" onclick="purgeTaskBlueprintByAdmin(${t.task_id})">Delete</button>
                   </td>
+               </tr>`
+                  )
+                  .join("")
+            : `<tr><td colspan="5" style="padding:15px; text-align:center; color:var(--text-muted)">No tasks created yet.</td></tr>`;
+
+        const resAllApps = await fetch(`${API_BASE_URL}/admin/all-applications`, { headers });
+        const allApps = resAllApps.ok ? await resAllApps.json() : [];
+        const allAppsTbody = document.getElementById("admin-all-apps-tbody");
+        allAppsTbody.innerHTML = allApps.length
+            ? allApps
+                  .map((app) => {
+                      const safeCode = (app.submission_text || "No submission yet")
+                          .replace(/&/g, "&amp;")
+                          .replace(/</g, "&lt;")
+                          .replace(/>/g, "&gt;");
+                      const reviewBtns =
+                          app.status === "pending"
+                              ? `<button class="btn btn-success btn-sm" onclick="reviewStudentSubmissionArtifact(${app.app_id}, 'approve')">Approve</button>
+                                 <button class="btn btn-danger btn-sm" onclick="reviewStudentSubmissionArtifact(${app.app_id}, 'reject')">Reject</button>`
+                              : `<span class="badge badge-success">${app.status}</span>`;
+                      return `
+               <tr style="border-bottom:1px solid var(--border-color)">
+                  <td style="padding:10px;"><b>${app.student_name || "Student"}</b><br><small>${app.student_email || ""}</small></td>
+                  <td style="padding:10px;">${app.task_title} <small>(${app.task_difficulty || ""})</small></td>
+                  <td style="padding:10px;"><span class="badge">${app.status}</span></td>
+                  <td style="padding:10px;"><div class="code-preview-box">${safeCode}</div></td>
+                  <td style="padding:10px;"><div style="display:flex; gap:5px;">${reviewBtns}</div></td>
+               </tr>`;
+                  })
+                  .join("")
+            : `<tr><td colspan="5" style="padding:15px; text-align:center; color:var(--text-muted)">No student applications yet.</td></tr>`;
+
+        const resSubs = await fetch(`${API_BASE_URL}/admin/submissions`, { headers });
+        const subs = resSubs.ok ? await resSubs.json() : [];
+        const subsTbody = document.getElementById("admin-submissions-tbody");
+        subsTbody.innerHTML = subs.length
+            ? subs
+                  .map((sub) => {
+                      const safeCodeSnippet = (sub.submission_text || "/* Empty submission */")
+                          .replace(/&/g, "&amp;")
+                          .replace(/</g, "&lt;")
+                          .replace(/>/g, "&gt;");
+                      return `
+               <tr style="border-bottom:1px solid var(--border-color)">
+                  <td style="padding:10px; color:var(--purple)"><b>${sub.student_email}</b><br><small style="color:var(--text-muted)">${sub.student_name || "Student"}</small></td>
+                  <td style="padding:10px; color:#fff">${sub.task_title}</td>
+                  <td style="padding:10px;"><div class="code-preview-box">${safeCodeSnippet}</div></td>
                   <td style="padding:10px;">
                      <div style="display:flex; gap:5px;">
                         <button class="btn btn-success btn-sm" onclick="reviewStudentSubmissionArtifact(${sub.app_id}, 'approve')">Approve Work</button>
@@ -716,11 +866,35 @@ async function loadAdminConsoleData() {
                      </div>
                   </td>
                </tr>`;
-        });
-
+                  })
+                  .join("")
+            : `<tr><td colspan="4" style="padding:15px; text-align:center; color:var(--text-muted)">Pending queue is empty.</td></tr>`;
     } catch (err) {
-        console.error("Administrative management console initialization fault error tracking sequence exception:", err);
+        console.error("Admin console load error:", err);
+        showToast("Could not load admin dashboard. Check API / Supabase.", "error");
     }
+}
+
+function openTaskUpgradePanel(taskId) {
+    const task = adminTasksCache.find((t) => t.task_id === taskId);
+    if (!task) {
+        showToast("Task data not loaded.", "error");
+        return;
+    }
+    document.getElementById("admin-edit-task-id").value = task.task_id;
+    document.getElementById("admin-edit-task-title").value = task.title;
+    document.getElementById("admin-edit-task-desc").value = task.description;
+    document.getElementById("admin-edit-task-diff").value = task.difficulty;
+    document.getElementById("admin-edit-task-xp").value = task.reward_xp;
+    document.getElementById("admin-edit-task-status").value = task.status || "active";
+    const skillId = task.required_skills?.[0]?.skill_id;
+    if (skillId) document.getElementById("admin-edit-task-skill-select").value = skillId;
+    document.getElementById("admin-task-upgrade-panel").style.display = "block";
+    document.getElementById("admin-task-upgrade-panel").scrollIntoView({ behavior: "smooth" });
+}
+
+function closeTaskUpgradePanel() {
+    document.getElementById("admin-task-upgrade-panel").style.display = "none";
 }
 
 async function reviewStudentSubmissionArtifact(applicationId, actionDecisionString) {
