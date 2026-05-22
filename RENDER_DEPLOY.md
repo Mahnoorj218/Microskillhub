@@ -34,7 +34,8 @@ Dashboard → **New +** → **Web Service** → GitHub repo connect karo.
 | `SUPABASE_URL` | Yes | `https://xxxxx.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase → Settings → API → **service_role** (secret) |
 | `SUPABASE_ANON_KEY` | Optional | anon public key |
-| `GEMINI_API_KEY` | Yes (AI chat) | Google AI Studio key |
+| `OPENAI_API_KEY` | Yes (AI chat) | OpenAI API key (ChatGPT) |
+| `OPENAI_MODEL` | No | Default `gpt-4o-mini` |
 | `CORS_ORIGINS` | Optional | `*` ya apni Render URL |
 | `PYTHON_VERSION` | Recommended | `3.13.0` |
 

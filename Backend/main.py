@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 import schemas as models
-from ai_service import get_ai_career_advice
+from ai_service import check_openai_api, get_ai_career_advice
 from auth_supabase import resolve_current_user, sign_in_user, sign_up_user
 from db import delete_rows, fetch_all, fetch_one, insert_row, rpc, update_rows
 from supabase_client import get_supabase, jwt_key_role, validate_service_role_key
@@ -48,16 +48,25 @@ async def health_check():
     except Exception as exc:
         key_ok = False
         key_role = str(exc)
+    ai = check_openai_api()
+    all_ok = key_ok and admin_api_ok and ai.get("ok")
+    hints = []
+    if not (key_ok and admin_api_ok):
+        hints.append(
+            "Set SUPABASE_SERVICE_ROLE_KEY to service_role secret (not anon)."
+        )
+    if not ai.get("ok"):
+        hints.append(ai.get("detail", "Fix OPENAI_API_KEY."))
+
     return {
-        "status": "ok" if key_ok and admin_api_ok else "misconfigured",
+        "status": "ok" if all_ok else "misconfigured",
         "frontend": FRONTEND_DIR.is_dir(),
         "supabase_key_role": key_role,
         "admin_api_ok": admin_api_ok,
-        "hint": (
-            None
-            if key_ok and admin_api_ok
-            else "Set SUPABASE_SERVICE_ROLE_KEY to service_role secret from Supabase → Settings → API (not anon)."
-        ),
+        "ai_ok": ai.get("ok"),
+        "ai_provider": "openai",
+        "ai_detail": ai.get("detail") or ai.get("model"),
+        "hint": None if all_ok else " ".join(hints),
     }
 
 
@@ -92,15 +101,24 @@ def _attach_required_skills(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]
             .eq("task_id", task["task_id"])
             .execute()
         )
-        task["required_skills"] = [
-            {
-                "skill_id": row["skill_id"],
-                "skill_name": row["skills"]["skill_name"],
-                "required_level": row["required_level"],
-            }
-            for row in (req.data or [])
-            if row.get("skills")
-        ]
+        task["required_skills"] = []
+        for row in req.data or []:
+            skills = row.get("skills")
+            if isinstance(skills, dict):
+                skill_name = skills.get("skill_name")
+            elif isinstance(skills, list) and skills:
+                skill_name = skills[0].get("skill_name")
+            else:
+                continue
+            if not skill_name:
+                continue
+            task["required_skills"].append(
+                {
+                    "skill_id": row["skill_id"],
+                    "skill_name": skill_name,
+                    "required_level": row["required_level"],
+                }
+            )
     return tasks
 
 
@@ -384,11 +402,6 @@ async def get_global_leaderboard(current_user: dict = Depends(get_current_user))
 async def ai_chat(
     payload: models.ChatRequest, current_user: dict = Depends(get_current_user)
 ):
-    if current_user["role"] != "student":
-        raise HTTPException(
-            status_code=403, detail="AI Assistant is dedicated to guiding student pathways."
-        )
-
     client = get_supabase()
     response = (
         client.table("user_skills")

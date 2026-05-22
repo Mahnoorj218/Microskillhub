@@ -16,11 +16,42 @@ let activeDifficultyFilter = "all";
 // Initialization routine when document loads
 document.addEventListener("DOMContentLoaded", () => {
     ensureFreshAuthStorage();
+    initMobileNav();
     initAppRouting();
     setupFormListeners();
     checkExistingAuth();
     setupFilterChips();
 });
+
+function closeMobileNav() {
+    const panel = document.getElementById("nav-links-panel");
+    const toggle = document.getElementById("nav-menu-toggle");
+    if (panel) panel.classList.remove("is-open");
+    if (toggle) {
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.textContent = "☰";
+    }
+}
+
+function initMobileNav() {
+    const toggle = document.getElementById("nav-menu-toggle");
+    const panel = document.getElementById("nav-links-panel");
+    if (!toggle || !panel) return;
+
+    toggle.addEventListener("click", () => {
+        const open = panel.classList.toggle("is-open");
+        toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        toggle.textContent = open ? "✕" : "☰";
+    });
+
+    panel.querySelectorAll("a, button").forEach((el) => {
+        el.addEventListener("click", () => closeMobileNav());
+    });
+
+    window.addEventListener("resize", () => {
+        if (window.innerWidth > 900) closeMobileNav();
+    });
+}
 
 /** Fetch with Bearer token; auto logout on 401 */
 async function authFetch(url, options = {}) {
@@ -87,14 +118,23 @@ function navigateTo(sectionId) {
     sections.forEach((sec) => (sec.style.display = "none"));
 
     const activeSection = document.getElementById(sectionId);
-    if (activeSection) {
-        activeSection.style.display = "block";
-        currentView = sectionId;
+    if (!activeSection) return;
+
+    activeSection.style.display = "block";
+    currentView = sectionId;
+    closeMobileNav();
+
+    if (window.location.hash.replace("#", "") !== sectionId) {
         window.location.hash = sectionId;
     }
 
     document.querySelectorAll(".nav-links a").forEach((link) => link.classList.remove("nav-active"));
     if (sectionId === "section-admin") document.getElementById("nav-admin")?.classList.add("nav-active");
+    if (sectionId === "section-dashboard") document.getElementById("nav-dashboard")?.classList.add("nav-active");
+    if (sectionId === "section-skills") document.getElementById("nav-skills")?.classList.add("nav-active");
+    if (sectionId === "section-tasks") document.getElementById("nav-tasks")?.classList.add("nav-active");
+    if (sectionId === "section-ai") document.getElementById("nav-ai")?.classList.add("nav-active");
+    if (sectionId === "section-leaderboard") document.getElementById("nav-leaderboard")?.classList.add("nav-active");
 
     if (sectionId === "section-dashboard") loadDashboardData();
     if (sectionId === "section-skills") loadSkillsManagerData();
@@ -106,8 +146,11 @@ function navigateTo(sectionId) {
 function initAppRouting() {
     window.addEventListener("hashchange", () => {
         const hash = window.location.hash.replace("#", "");
-        if (hash) navigateTo(hash);
+        if (hash && hash !== currentView) navigateTo(hash);
     });
+
+    const initial = window.location.hash.replace("#", "");
+    if (initial) navigateTo(initial);
 }
 
 // ==========================================================================
@@ -352,19 +395,21 @@ function setupFormListeners() {
         loader.style.display = "flex";
 
         try {
-            const res = await fetch(`${API_BASE_URL}/ai/chat`, {
+            const res = await authFetch(`${API_BASE_URL}/ai/chat`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${localStorage.getItem("token")}`
-                },
-                body: JSON.stringify({ message: msg })
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: msg }),
             });
+            if (res.status === 401) return;
             const data = await res.json();
             if (res.ok) {
                 appendChatBubble(data.reply, "ai-msg");
             } else {
-                appendChatBubble("Error communicating with AI runtime server instance.", "ai-msg");
+                const err =
+                    typeof data.detail === "string"
+                        ? data.detail
+                        : "Could not reach AI service. Check login and try again.";
+                appendChatBubble(err, "ai-msg");
             }
         } catch {
             appendChatBubble("AI compilation network failure channel.", "ai-msg");
@@ -803,12 +848,45 @@ function appendChatBubble(text, className) {
 // ==========================================================================
 // ADMIN CONSOLE INTERFACE CONTROLLERS MODULES
 // ==========================================================================
+let adminConsoleLoading = false;
+
+async function safeJsonArray(res) {
+    if (!res || !res.ok) return [];
+    try {
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+    } catch {
+        return [];
+    }
+}
+
+async function safeJsonObject(res) {
+    if (!res || !res.ok) return {};
+    try {
+        const data = await res.json();
+        return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+    } catch {
+        return {};
+    }
+}
+
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
 async function loadAdminConsoleData() {
     if (localStorage.getItem("role") !== "admin") return;
+    if (adminConsoleLoading) return;
+    adminConsoleLoading = true;
+
+    const failures = [];
 
     try {
         const resAllSk = await fetch(`${API_BASE_URL}/skills/all`);
-        const allSk = resAllSk.ok ? await resAllSk.json() : [];
+        const allSk = await safeJsonArray(resAllSk);
+        if (!resAllSk.ok) failures.push("skills catalog");
+
         const skillOptions = allSk
             .map((s) => `<option value="${s.skill_id}">${s.skill_name} [${s.category}]</option>`)
             .join("");
@@ -820,15 +898,20 @@ async function loadAdminConsoleData() {
 
         const resStats = await authFetch(`${API_BASE_URL}/admin/stats`);
         if (resStats.status === 401) return;
-        const stats = resStats.ok ? await resStats.json() : {};
-        document.getElementById("admin-stat-students").textContent = stats.students || 0;
-        document.getElementById("admin-stat-pending").textContent = stats.pending || 0;
-        document.getElementById("admin-stat-tasks").textContent = stats.tasks || 0;
+        const stats = await safeJsonObject(resStats);
+        if (!resStats.ok) failures.push("stats");
+        setText("admin-stat-students", stats.students ?? 0);
+        setText("admin-stat-pending", stats.pending ?? 0);
+        setText("admin-stat-tasks", stats.tasks ?? 0);
 
         const resStudents = await authFetch(`${API_BASE_URL}/admin/users`);
         if (resStudents.status === 401) return;
-        const students = resStudents.ok ? await resStudents.json() : [];
+        const students = await safeJsonArray(resStudents);
+        if (!resStudents.ok) failures.push("students");
         const studentsTbody = document.getElementById("admin-students-tbody");
+        if (!studentsTbody) {
+            failures.push("students table (UI)");
+        } else {
         studentsTbody.innerHTML = students.length
             ? students
                   .map(
@@ -843,11 +926,14 @@ async function loadAdminConsoleData() {
                   )
                   .join("")
             : `<tr><td colspan="5" style="padding:15px; text-align:center; color:var(--text-muted)">No students registered yet.</td></tr>`;
+        }
 
         const resTasks = await authFetch(`${API_BASE_URL}/tasks/all`);
         if (resTasks.status === 401) return;
-        adminTasksCache = resTasks.ok ? await resTasks.json() : [];
+        adminTasksCache = await safeJsonArray(resTasks);
+        if (!resTasks.ok) failures.push("tasks");
         const tasksTbody = document.getElementById("admin-tasks-tbody");
+        if (tasksTbody) {
         tasksTbody.innerHTML = adminTasksCache.length
             ? adminTasksCache
                   .map(
@@ -858,18 +944,23 @@ async function loadAdminConsoleData() {
                   <td style="padding:10px;"><span class="badge badge-success">${t.difficulty}</span></td>
                   <td style="padding:10px; color:var(--teal)">${t.reward_xp} XP</td>
                   <td style="padding:10px;">
+                     <div class="btn-group-wrap">
                      <button class="btn btn-outline btn-sm" onclick="openTaskUpgradePanel(${t.task_id})">Upgrade</button>
                      <button class="btn btn-danger btn-sm" onclick="purgeTaskBlueprintByAdmin(${t.task_id})">Delete</button>
+                     </div>
                   </td>
                </tr>`
                   )
                   .join("")
             : `<tr><td colspan="5" style="padding:15px; text-align:center; color:var(--text-muted)">No tasks created yet.</td></tr>`;
+        }
 
         const resAllApps = await authFetch(`${API_BASE_URL}/admin/all-applications`);
         if (resAllApps.status === 401) return;
-        const allApps = resAllApps.ok ? await resAllApps.json() : [];
+        const allApps = await safeJsonArray(resAllApps);
+        if (!resAllApps.ok) failures.push("applications");
         const allAppsTbody = document.getElementById("admin-all-apps-tbody");
+        if (allAppsTbody) {
         allAppsTbody.innerHTML = allApps.length
             ? allApps
                   .map((app) => {
@@ -888,16 +979,19 @@ async function loadAdminConsoleData() {
                   <td style="padding:10px;">${app.task_title} <small>(${app.task_difficulty || ""})</small></td>
                   <td style="padding:10px;"><span class="badge">${app.status}</span></td>
                   <td style="padding:10px;"><div class="code-preview-box">${safeCode}</div></td>
-                  <td style="padding:10px;"><div style="display:flex; gap:5px;">${reviewBtns}</div></td>
+                  <td style="padding:10px;"><div class="btn-group-wrap">${reviewBtns}</div></td>
                </tr>`;
                   })
                   .join("")
             : `<tr><td colspan="5" style="padding:15px; text-align:center; color:var(--text-muted)">No student applications yet.</td></tr>`;
+        }
 
         const resSubs = await authFetch(`${API_BASE_URL}/admin/submissions`);
         if (resSubs.status === 401) return;
-        const subs = resSubs.ok ? await resSubs.json() : [];
+        const subs = await safeJsonArray(resSubs);
+        if (!resSubs.ok) failures.push("submissions");
         const subsTbody = document.getElementById("admin-submissions-tbody");
+        if (subsTbody) {
         subsTbody.innerHTML = subs.length
             ? subs
                   .map((sub) => {
@@ -911,7 +1005,7 @@ async function loadAdminConsoleData() {
                   <td style="padding:10px; color:#fff">${sub.task_title}</td>
                   <td style="padding:10px;"><div class="code-preview-box">${safeCodeSnippet}</div></td>
                   <td style="padding:10px;">
-                     <div style="display:flex; gap:5px;">
+                     <div class="btn-group-wrap">
                         <button class="btn btn-success btn-sm" onclick="reviewStudentSubmissionArtifact(${sub.app_id}, 'approve')">Approve Work</button>
                         <button class="btn btn-danger btn-sm" onclick="reviewStudentSubmissionArtifact(${sub.app_id}, 'reject')">Reject</button>
                      </div>
@@ -920,9 +1014,22 @@ async function loadAdminConsoleData() {
                   })
                   .join("")
             : `<tr><td colspan="4" style="padding:15px; text-align:center; color:var(--text-muted)">Pending queue is empty.</td></tr>`;
+        }
+
+        if (failures.length) {
+            showToast(
+                `Some admin data failed to load (${failures.join(", ")}). Sign out and login again, or check /api/health.`,
+                "error"
+            );
+        }
     } catch (err) {
         console.error("Admin console load error:", err);
-        showToast("Could not load admin dashboard. Check API / Supabase.", "error");
+        showToast(
+            "Admin dashboard error. Hard refresh (Ctrl+Shift+R), sign out, login as Platform Administrator.",
+            "error"
+        );
+    } finally {
+        adminConsoleLoading = false;
     }
 }
 

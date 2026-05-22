@@ -63,7 +63,8 @@ SUPABASE_URL=https://xxxxx.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=eyJhbG...
 SUPABASE_ANON_KEY=eyJhbG...
 CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
-GEMINI_API_KEY=your_key
+OPENAI_API_KEY=sk-your_openai_key
+OPENAI_MODEL=gpt-4o-mini
 ```
 
 ---
@@ -140,7 +141,7 @@ Supabase Auth + PostgreSQL
 | Login 401 | Email confirm OFF karo ya email verify karo |
 | Register OK but login fail | `profiles` table mein row hai? SQL migration dubara run karo |
 | Skills empty | `001_initial.sql` seed skills insert karta hai |
-| AI chat error | `GEMINI_API_KEY` set karo |
+| AI chat error | `OPENAI_API_KEY` set karo (OpenAI platform) |
 
 ---
 

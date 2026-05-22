@@ -31,7 +31,8 @@ Repo root par `Dockerfile` + `railway.toml` hain.
 |----------|----------|
 | `SUPABASE_URL` | Yes — `https://xxxx.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes — **service_role** secret only |
-| `GEMINI_API_KEY` | Yes |
+| `OPENAI_API_KEY` | Yes — [OpenAI API keys](https://platform.openai.com/api-keys) (ChatGPT) |
+| `OPENAI_MODEL` | Optional — default `gpt-4o-mini` |
 | `CORS_ORIGINS` | `*` |
 
 ### `SUPABASE_SERVICE_ROLE_KEY` — common mistake
