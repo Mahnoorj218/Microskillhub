@@ -1,827 +1,768 @@
-/**
- * ==========================================================================
- * MICRO-SKILL HUB SPA CORE ENGINE (app.js) - MASTER PREMIUM EDITION
- * Global Constants & Configurations
- * ==========================================================================
- */
-const BACKEND_URL = 'http://localhost:8000';
+// ==========================================================================
+// CONFIGURATION & GLOBAL STATE SYSTEM
+// ==========================================================================
+const API_BASE_URL = "http://127.0.0.1:8000/api";
+let currentView = "section-home";
+let activeDifficultyFilter = "all";
 
-/* Global references to keep track of operational state layers client-side */
-let cachedTasks = []; 
-let cachedRecommendations = [];
+// Initialization routine when document loads
+document.addEventListener("DOMContentLoaded", () => {
+    initAppRouting();
+    setupFormListeners();
+    checkExistingAuth();
+    setupFilterChips();
+});
 
-/**
- * ==========================================================================
- * UTILITY FUNCTIONS (Loading, Routing, Toasts, API Infrastructure)
- * ==========================================================================
- */
-
-function showSection(sectionId) {
-  const sections = document.querySelectorAll('main.spa-content > section');
-  sections.forEach(sec => {
-    sec.style.display = 'none';
-  });
-
-  const targetSection = document.getElementById(sectionId);
-  if (targetSection) {
-    targetSection.style.display = 'block';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  } else {
-    console.error(`SPA Router: Destination ID "${sectionId}" was not found.`);
-  }
-}
-
-function showLoading() {
-  const spinner = document.getElementById('loading-spinner');
-  if (spinner) spinner.style.display = 'flex';
-}
-
-function hideLoading() {
-  const spinner = document.getElementById('loading-spinner');
-  if (spinner) spinner.style.display = 'none';
-}
-
-function showToast(message, type = 'success') {
-  const existing = document.querySelector('.toast-popup');
-  if (existing) existing.remove();
-
-  const toast = document.createElement('div');
-  toast.className = `toast-popup ${type}`;
-  toast.textContent = message;
-  document.body.appendChild(toast);
-
-  setTimeout(() => { if (toast) toast.remove(); }, 3200);
-}
-
-function setToken(token) { localStorage.setItem('msh_token', token); }
-function getToken() { return localStorage.getItem('msh_token'); }
-function removeToken() { localStorage.removeItem('msh_token'); }
-
-async function makeAuthenticatedRequest(url, options = {}) {
-  const token = getToken();
-  if (!token) {
-    handleLogout();
-    throw new Error("Authentication credential token not found.");
-  }
-
-  options.headers = {
-    ...options.headers,
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  };
-
-  const response = await fetch(url, options);
-  if (response.status === 401) {
-    handleLogout();
-    throw new Error("Session expired. Please log in again.");
-  }
-  return response;
-}
-
-/**
- * ==========================================================================
- * USER SECURITY LAYERS & ROUTING CONTROLLERS
- * ==========================================================================
- */
-
-function setupNavigation() {
-  document.querySelectorAll('[data-target]').forEach(link => {
-    link.addEventListener('click', function(e) {
-      e.preventDefault();
-      const dest = this.getAttribute('data-target');
-      navigateTo(dest);
-    });
-  });
-}
-
+// ==========================================================================
+// ROUTING & NAVIGATION FRAMEWORK
+// ==========================================================================
 function navigateTo(sectionId) {
-  const token = getToken();
+    // Hide all view screens
+    const sections = document.querySelectorAll("main.spa-content > section");
+    sections.forEach(sec => sec.style.display = "none");
 
-  if (!token && !publicPublicOverrideCheck(sectionId)) {
-    showSection('section-home');
-    return;
-  }
+    // Enable visibility for targeted view
+    const activeSection = document.getElementById(sectionId);
+    if (activeSection) {
+        activeSection.style.display = "block";
+        currentView = sectionId;
+    }
 
-  showSection(sectionId);
-
-  // Trigger real-time view statistics pipeline data fetch steps
-  if (sectionId === 'section-dashboard') fetchStudentDashboardMetrics();
-  if (sectionId === 'section-skills') fetchSkillsMatrixInventory();
-  if (sectionId === 'section-tasks') fetchPlatformTasksCatalog();
-  if (sectionId === 'section-chat') syncAIChatViewportConsole();
-  if (sectionId === 'section-admin') fetchAdminMetricsEngine();
+    // Trigger data fetch pipelines based on current views mapping
+    if (sectionId === "section-dashboard") loadDashboardData();
+    if (sectionId === "section-skills") loadSkillsManagerData();
+    if (sectionId === "section-tasks") loadAvailableTasks();
+    if (sectionId === "section-leaderboard") loadGlobalLeaderboard();
+    if (sectionId === "section-admin") loadAdminConsoleData();
 }
 
-function publicPublicOverrideCheck(id) {
-  return ['section-home', 'section-login', 'section-register'].includes(id);
-}
-
-function initPasswordSecurityFeatures() {
-  console.log("Cryptography validation framework initialized.");
-}
-
-/**
- * ==========================================================================
- * CONTROLLER ACTIONS (Auth, Forms, Pipeline Submission Actions)
- * ==========================================================================
- */
-
-async function handleRegister(e) {
-  e.preventDefault();
-  const fullName = document.getElementById('reg-fullname').value;
-  const email = document.getElementById('reg-email').value;
-  const password = document.getElementById('reg-password').value;
-  const rollNumber = document.getElementById('reg-rollnumber').value;
-  
-  const roleRadio = document.querySelector('input[name="reg-role"]:checked');
-  const role = roleRadio ? roleRadio.value : 'student';
-
-  const payload = {
-    full_name: fullName,
-    email: email,
-    password: password,
-    role: role,
-    roll_number: rollNumber
-  };
-
-  showLoading();
-  try {
-    const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+function initAppRouting() {
+    window.addEventListener("hashchange", () => {
+        const hash = window.location.hash.replace("#", "");
+        if (hash) navigateTo(hash);
     });
-    
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Registration workflow faulted.");
-
-    showToast("Registration completed successfully! Please Log In.");
-    navigateTo('section-login');
-    document.getElementById('form-register-submit').reset();
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    hideLoading();
-  }
 }
 
-async function handleLogin(e) {
-  e.preventDefault();
-  const email = document.getElementById('login-email').value;
-  const password = document.getElementById('login-password').value;
-  const roleRadio = document.querySelector('input[name="login-role"]:checked');
-  const role = roleRadio ? roleRadio.value : 'student';
-
-  const payload = { email, password, role };
-
-  showLoading();
-  try {
-    const res = await fetch(`${BACKEND_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Invalid system credentials.");
-
-    setToken(data.access_token);
-    const userObj = { name: data.name, role: data.role };
-    localStorage.setItem('msh_user', JSON.stringify(userObj));
-
-    syncNavbarState(userObj);
-    showToast(`Welcome back, ${data.name}!`);
-    
-    navigateTo(data.role === 'admin' ? 'section-admin' : 'section-dashboard');
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    hideLoading();
-  }
+// ==========================================================================
+// UI GLOBAL NOTIFICATION SYSTEMS
+// ==========================================================================
+function toggleSpinner(show) {
+    document.getElementById("loading-spinner").style.display = show ? "flex" : "none";
 }
 
-function syncNavbarState(user) {
-  const loggedOut = document.getElementById('auth-logged-out');
-  const loggedIn = document.getElementById('auth-logged-in');
-  const navLinks = document.querySelector('.nav-links');
-
-  if (user) {
-    if (loggedOut) loggedOut.style.display = 'none';
-    if (loggedIn) {
-      loggedIn.style.display = 'flex';
-      document.getElementById('nav-username').textContent = user.name;
-    }
+function showToast(message, type = "success") {
+    const toast = document.getElementById("toast");
+    const toastMsg = document.getElementById("toast-message");
     
-    if (navLinks) {
-      navLinks.innerHTML = user.role === 'admin' 
-        ? `<li><a href="#" data-target="section-admin">Admin Control Panel</a></li>`
-        : `<li><a href="#" data-target="section-dashboard">Dashboard</a></li>
-           <li><a href="#" data-target="section-skills">My Skills</a></li>
-           <li><a href="#" data-target="section-tasks">Tasks Portal</a></li>
-           <li><a href="#" data-target="section-chat">AI Advisor Chat</a></li>`;
-      setupNavigation();
-    }
-  } else {
-    if (loggedOut) loggedOut.style.display = 'flex';
-    if (loggedIn) loggedIn.style.display = 'none';
-    if (navLinks) {
-      navLinks.innerHTML = `<li><a href="#" data-target="section-home">Home</a></li>`;
-      setupNavigation();
-    }
-  }
+    toast.className = type; 
+    toastMsg.textContent = message;
+    toast.style.display = "block";
+    
+    setTimeout(() => {
+        toast.style.display = "none";
+    }, 4000);
 }
 
-function handleLogout() {
-  removeToken();
-  localStorage.removeItem('msh_user');
-  syncNavbarState(null);
-  showToast("You have been signed out successfully.");
-  navigateTo('section-home');
-}
+// ==========================================================================
+// AUTHENTICATION AND ACCESS control
+// ==========================================================================
+function checkExistingAuth() {
+    const token = localStorage.getItem("token");
+    const role = localStorage.getItem("role");
+    const name = localStorage.getItem("name");
 
-/**
- * ==========================================================================
- * STUDENT VIEWS CONTROLLERS PIPELINE INVENTORY
- * ==========================================================================
- */
-
-async function fetchStudentDashboardMetrics() {
-  showLoading();
-  try {
-    const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/student/dashboard`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Failed to load dashboard metrics.");
-
-    document.getElementById('dash-xp-val').textContent = data.current_xp;
-    document.getElementById('dash-skills-count').textContent = data.skills_count;
-    document.getElementById('dash-applied-count').textContent = data.applied_tasks_count;
-    document.getElementById('dash-completed-count').textContent = data.completed_tasks_count;
-
-    const currentLevel = Math.floor(data.current_xp / 1000) + 1;
-    const nextLevelXPTarget = currentLevel * 1000;
-    const currentLevelBaseXP = (currentLevel - 1) * 1000;
-    const xpEarnedInLevel = data.current_xp - currentLevelBaseXP;
-    const progressPercent = Math.min((xpEarnedInLevel / 1000) * 100, 100);
-
-    document.getElementById('dash-level-lbl').textContent = `Level ${currentLevel}`;
-    document.getElementById('dash-xp-progress-text').textContent = `${data.current_xp} / ${nextLevelXPTarget} Total XP`;
-    document.getElementById('dash-progress-fill').style.width = `${progressPercent}%`;
-
-    const skillsContainer = document.getElementById('dash-skill-bars-stack');
-    skillsContainer.innerHTML = '';
-    if (data.skills.length === 0) {
-      skillsContainer.innerHTML = `<p style="font-size:0.85rem; color:var(--gray);">No track profiles added yet. Head to "My Skills" view to begin profiling.</p>`;
+    if (token && role) {
+        document.getElementById("auth-logged-out").style.display = "none";
+        document.getElementById("auth-logged-in").style.display = "flex";
+        document.getElementById("user-display-name").textContent = `👤 ${name}`;
+        
+        if (role === "admin") {
+            document.getElementById("nav-admin").style.display = "inline-block";
+        } else {
+            document.getElementById("nav-admin").style.display = "none";
+        }
+        navigateTo("section-dashboard");
     } else {
-      data.skills.forEach(sk => {
-        const row = document.createElement('div');
-        row.innerHTML = `
-          <div class="skill-meta"><span>${sk.skill_name}</span><span>${sk.proficiency_level} (${sk.proficiency_percent}%)</span></div>
-          <div class="bar-bg"><div class="bar-fill" style="width: ${sk.proficiency_percent}%;"></div></div>
-        `;
-        skillsContainer.appendChild(row);
-      });
+        performClientSignout();
     }
-
-    const recsContainer = document.getElementById('dash-recommendations-list');
-    recsContainer.innerHTML = '';
-    if (data.recommendations.length === 0) {
-      recsContainer.innerHTML = `<p style="font-size:0.85rem; color:var(--gray);">Add structured skills matrix data components to unlock immediate AI optimizations.</p>`;
-    } else {
-      data.recommendations.forEach(rec => {
-        const div = document.createElement('div');
-        div.className = 'rec-card';
-        div.style.marginBottom = '10px';
-        div.innerHTML = `
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-             <span class="badge badge-hot">Recommended Task</span>
-             <span class="task-xp-yield">+${rec.reward_xp} XP</span>
-          </div>
-          <h4>${rec.title}</h4>
-          <p>${rec.description.substring(0, 110)}...</p>
-          <button class="btn btn-sm btn-primary btn-block" onclick="navigateTo('section-tasks')">View Task Details</button>
-        `;
-        recsContainer.appendChild(div);
-      });
-    }
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    hideLoading();
-  }
 }
 
-async function fetchSkillsMatrixInventory() {
-  showLoading();
-  try {
-    const skRes = await fetch(`${BACKEND_URL}/api/skills/catalog`);
-    const catalog = await skRes.json();
-    const dropdown = document.getElementById('add-skill-select');
-    dropdown.innerHTML = '<option value="">-- Choose Platform Track Option --</option>';
-    catalog.forEach(s => {
-      dropdown.innerHTML += `<option value="${s.skill_id}">${s.skill_name} [${s.category}]</option>`;
+function performClientSignout() {
+    localStorage.clear();
+    document.getElementById("auth-logged-out").style.display = "flex";
+    document.getElementById("auth-logged-in").style.display = "none";
+    document.getElementById("nav-admin").style.display = "none";
+    navigateTo("section-home");
+}
+
+document.getElementById("btn-logout").addEventListener("click", performClientSignout);
+
+// ==========================================================================
+// HTTP FORM HANDLERS (SUBMISSIONS & PAYLOADS)
+// ==========================================================================
+function setupFormListeners() {
+    // User login process pipeline
+    document.getElementById("form-login").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        toggleSpinner(true);
+        
+        const payload = {
+            email: document.getElementById("login-email").value,
+            password: document.getElementById("login-password").value,
+            role: document.getElementById("login-role").value
+        };
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/auth/login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+                localStorage.setItem("token", data.access_token);
+                localStorage.setItem("role", data.role);
+                localStorage.setItem("name", data.name);
+                localStorage.setItem("user_id", data.user_id);
+                showToast("Authenticated successfully. Welcome!");
+                checkExistingAuth();
+            } else {
+                showToast(data.detail || "Authentication mapping failure.", "error");
+            }
+        } catch (err) {
+            showToast("Server configuration connection failure.", "error");
+        } finally {
+            toggleSpinner(false);
+        }
     });
 
-    const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/student/skills`);
-    const data = await res.json();
+    // User system onboarding pipeline registration
+    document.getElementById("form-register").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const pwd = document.getElementById("reg-password").value;
+        const cpwd = document.getElementById("reg-confirm-password").value;
+
+        if (pwd !== cpwd) {
+            showToast("Password confirmation inputs mismatch.", "error");
+            return;
+        }
+
+        toggleSpinner(true);
+        const selectedRole = document.querySelector('input[name="reg-role"]:checked').value;
+        const payload = {
+            full_name: `${document.getElementById("reg-firstname").value} ${document.getElementById("reg-lastname").value}`,
+            email: document.getElementById("reg-email").value,
+            password: pwd,
+            role: selectedRole,
+            roll_number: `SE-${Math.floor(1000 + Math.random() * 9000)}`
+        };
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/auth/register`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                showToast("Account established completely. Proceed to login workspace.");
+                navigateTo("section-login");
+            } else {
+                showToast(data.detail || "Registration processing denied.", "error");
+            }
+        } catch (err) {
+            showToast("Network pipeline initialization failure.", "error");
+        } finally {
+            toggleSpinner(false);
+        }
+    });
+
+    // Skill matrix logging injection form submission
+    document.getElementById("form-add-skill").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        toggleSpinner(true);
+
+        const payload = {
+            skill_id: parseInt(document.getElementById("new-skill-category").value),
+            proficiency_level: document.getElementById("new-skill-level").value,
+            proficiency_percent: document.getElementById("new-skill-level").value === "Beginner" ? 35 : document.getElementById("new-skill-level").value === "Intermediate" ? 65 : 95
+        };
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/skills/add`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${localStorage.getItem("token")}`
+                },
+                body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+                showToast("Skill added to profile matrix.");
+                loadSkillsManagerData();
+            } else {
+                const errData = await res.json();
+                showToast(errData.detail || "Error logging skill metadata.", "error");
+            }
+        } catch (err) {
+            showToast("Failed syncing skill infrastructure.", "error");
+        } finally {
+            toggleSpinner(false);
+        }
+    });
+
+    // SANDBOX COMPONENT INLINE DIRECT RAW CODE SUBMISSION FOR TESTING
+    document.getElementById("form-testing-submission").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        toggleSpinner(true);
+
+        const payload = {
+            app_id: parseInt(document.getElementById("submit-task-app-id").value),
+            submission_text: document.getElementById("submit-raw-code").value
+        };
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/tasks/submit`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${localStorage.getItem("token")}`
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            if (res.ok) {
+                showToast("Code logic dispatched successfully to Admin Evaluation Queue!");
+                document.getElementById("testing-submission-workspace").style.display = "none";
+                document.getElementById("submit-raw-code").value = "";
+                loadAvailableTasks();
+            } else {
+                const data = await res.json();
+                showToast(data.detail || "Submission tracking failure.", "error");
+            }
+        } catch (err) {
+            showToast("Communication line with testing engine failed.", "error");
+        } finally {
+            toggleSpinner(false);
+        }
+    });
+
+    // Copilot AI chatbot thread execution handling
+    document.getElementById("form-chat-input").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const msgBox = document.getElementById("chat-user-textbox");
+        const msg = msgBox.value.trim();
+        if (!msg) return;
+
+        appendChatBubble(msg, "user-msg");
+        msgBox.value = "";
+        
+        const loader = document.getElementById("ai-typing-loader");
+        loader.style.display = "flex";
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/ai/chat`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${localStorage.getItem("token")}`
+                },
+                body: JSON.stringify({ message: msg })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                appendChatBubble(data.reply, "ai-msg");
+            } else {
+                appendChatBubble("Error communicating with AI runtime server instance.", "ai-msg");
+            }
+        } catch {
+            appendChatBubble("AI compilation network failure channel.", "ai-msg");
+        } finally {
+            loader.style.display = "none";
+        }
+    });
+
+    // Admin blueprint pipeline creator engine
+    document.getElementById("form-admin-create-task").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        toggleSpinner(true);
+
+        const payload = {
+            title: document.getElementById("admin-task-title").value,
+            description: document.getElementById("admin-task-desc").value,
+            difficulty: document.getElementById("admin-task-diff").value,
+            reward_xp: parseInt(document.getElementById("admin-task-xp").value),
+            required_skills: [parseInt(document.getElementById("admin-task-skill-select").value)]
+        };
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/admin/create-task`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${localStorage.getItem("token")}`
+                },
+                body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+                showToast("Task blueprint deployed to available student workspace matrix maps.");
+                document.getElementById("admin-task-title").value = "";
+                document.getElementById("admin-task-desc").value = "";
+                loadAdminConsoleData();
+            }
+        } catch {
+            showToast("Deployment pipeline fault block.", "error");
+        } finally {
+            toggleSpinner(false);
+        }
+    });
+}
+
+// ==========================================================================
+// CORE DATA FETCH PIPELINES & RENDERING DYNAMICS
+// ==========================================================================
+
+async function loadDashboardData() {
+    if (localStorage.getItem("role") === "admin") return;
     
-    const matrixGrid = document.getElementById('student-skills-grid');
-    matrixGrid.innerHTML = '';
-    
-    if (data.length === 0) {
-      matrixGrid.innerHTML = `<div class="matrix-card" style="grid-column: span 2; text-align:center;"><p style="color:var(--gray);">Your structured core skills list layout metrics are empty.</p></div>`;
-    } else {
-      data.forEach(sk => {
-        const card = document.createElement('div');
-        card.className = 'matrix-card';
-        card.innerHTML = `
-          <div class="card-badge-row"><span class="badge badge-success">${sk.proficiency_level}</span></div>
-          <h4>${sk.skill_name}</h4>
-          <p style="color:var(--gray); font-size:0.85rem; margin-top:0.25rem;">Proficiency Target Tuning Ratio Layer: ${sk.proficiency_percent}%</p>
-          <div class="bar-bg" style="margin: 0.75rem 0;"><div class="bar-fill" style="width: ${sk.proficiency_percent}%;"></div></div>
-          <button class="btn btn-sm btn-outline btn-block" style="border-color:var(--red); color:var(--red);" onclick="handleDeleteUserSkill(${sk.user_skill_id})">Remove Track Record</button>
-        `;
-        matrixGrid.appendChild(card);
-      });
-    }
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    hideLoading();
-  }
-}
-
-async function handleAddSkill(e) {
-  e.preventDefault();
-  const skill_id = parseInt(document.getElementById('add-skill-select').value);
-  const proficiency_level = document.getElementById('add-skill-level').value;
-  const proficiency_percent = parseInt(document.getElementById('add-skill-percent').value);
-
-  if (!skill_id || !proficiency_level || isNaN(proficiency_percent)) {
-    showToast("Please fill all required context configuration values.", 'error');
-    return;
-  }
-
-  const payload = { skill_id, proficiency_level, proficiency_percent };
-  showLoading();
-  try {
-    const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/student/skills`, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Skill record insertion error.");
-
-    showToast("Profile skill trace tracking item updated.");
-    document.getElementById('form-add-skill').reset();
-    fetchSkillsMatrixInventory();
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    hideLoading();
-  }
-}
-
-async function handleDeleteUserSkill(id) {
-  if (!confirm("Are you certain you wish to discard this indexed skill metric layer profiling parameters?")) return;
-  showLoading();
-  try {
-    const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/student/skills`, {
-      method: 'DELETE',
-      body: JSON.stringify({ user_skill_id: id })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Deletion target mismatch exception processing lifecycle.");
-
-    showToast("Skill profile structure purged successfully.");
-    fetchSkillsMatrixInventory();
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    hideLoading();
-  }
-}
-
-async function fetchPlatformTasksCatalog() {
-  showLoading();
-  try {
-    const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/student/tasks`);
-    const data = await res.json();
-    cachedTasks = data; 
-    renderTasksGrid(cachedTasks);
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    hideLoading();
-  }
-}
-
-function renderTasksGrid(tasksList) {
-  const container = document.getElementById('platform-tasks-grid');
-  container.innerHTML = '';
-
-  if (tasksList.length === 0) {
-    container.innerHTML = `<p style="grid-column: span 2; text-align:center; color:var(--gray);">No relevant operation tasks catalog match tracking constraints layers.</p>`;
-    return;
-  }
-
-  tasksList.forEach(tk => {
-    const card = document.createElement('div');
-    card.className = 'task-card';
-
-    let actionBtnHTML = '';
-    if (!tk.application_status) {
-      actionBtnHTML = `<button class="btn btn-sm btn-primary" onclick="handleApplyTask(${tk.task_id})">Apply Task</button>`;
-    } else if (tk.application_status === 'applied') {
-      actionBtnHTML = `
-        <div style="width:100%; display:flex; flex-direction:column; gap:8px; margin-top:10px;">
-           <input type="text" id="proof-${tk.application_id}" placeholder="Paste source link / description asset file" style="padding:6px; font-size:0.8rem; border:1px solid var(--border); border-radius:4px;" />
-           <button class="btn btn-sm btn-success" onclick="handleSubmitWorkProof(${tk.application_id})">Submit Asset Work Evidence</button>
-        </div>
-      `;
-    } else if (tk.application_status === 'submitted') {
-      actionBtnHTML = `<span class="badge badge-warn" style="padding:6px 12px;">Under Review Queue Audit</span>`;
-    } else if (tk.application_status === 'approved') {
-      actionBtnHTML = `<span class="badge badge-success" style="padding:6px 12px; background-color:rgba(16,185,129,0.25);">Completed & Credited</span>`;
-    } else if (tk.application_status === 'rejected') {
-      actionBtnHTML = `
-        <div style="display:flex; flex-direction:column; gap:4px;">
-           <span class="badge" style="background-color:rgba(239,68,68,0.15); color:var(--red); text-align:center;">Revision Requested</span>
-           <input type="text" id="proof-${tk.application_id}" placeholder="Paste revised work URL" style="padding:6px; font-size:0.8rem; border:1px solid var(--border); border-radius:4px;" />
-           <button class="btn btn-sm btn-primary" onclick="handleSubmitWorkProof(${tk.application_id})">Resubmit Revision</button>
-        </div>
-      `;
-    }
-
-    const requiredSkillsBadges = tk.required_skills.map(s => `<span class="task-tag">${s.skill_name} (${s.required_level})</span>`).join(' ');
-
-    card.innerHTML = `
-      <div class="task-card-header">
-         <span class="task-difficulty intermediate">${tk.difficulty}</span>
-         <span class="task-xp-yield">+${tk.reward_xp} XP</span>
-      </div>
-      <h3 class="task-title">${tk.title}</h3>
-      <p class="task-excerpt">${tk.description}</p>
-      <div style="margin-bottom: 1rem; display:flex; flex-wrap:wrap; gap:4px;">${requiredSkillsBadges}</div>
-      <div class="task-card-footer" style="margin-top:auto; padding-top:10px; border-top:1px solid var(--gray-light);">
-         ${actionBtnHTML}
-      </div>
-    `;
-    container.appendChild(card);
-  });
-}
-
-async function handleApplyTask(taskId) {
-  showLoading();
-  try {
-    const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/student/tasks/apply`, {
-      method: 'POST',
-      body: JSON.stringify({ task_id: taskId })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Task allocation parameters initialization error.");
-
-    showToast("Task assigned. Please review execution guidelines and fulfill dependencies proof.");
-    fetchPlatformTasksCatalog();
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    hideLoading();
-  }
-}
-
-async function handleSubmitWorkProof(appId) {
-  const txtVal = document.getElementById(`proof-${appId}`).value;
-  if (!txtVal || txtVal.trim().length < 5) {
-    showToast("Please supply explicit operational proof parameters deployment asset references.", 'error');
-    return;
-  }
-
-  showLoading();
-  try {
-    const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/student/tasks/submit`, {
-      method: 'POST',
-      body: JSON.stringify({ app_id: appId, submission_text: txtVal })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Evidence processing exception execution error.");
-
-    showToast("Work submission logged into admin audit pipelines successfully.");
-    fetchPlatformTasksCatalog();
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    hideLoading();
-  }
-}
-
-function handleSearch() {
-  const query = document.getElementById('task-search-input').value.toLowerCase().trim();
-  const filtered = cachedTasks.filter(t => t.title.toLowerCase().includes(query) || t.description.toLowerCase().includes(query));
-  renderTasksGrid(filtered);
-}
-
-function handleFilterChip(filterType, element) {
-  document.querySelectorAll('.filter-chips-row .chip').forEach(c => c.classList.remove('active'));
-  element.classList.add('active');
-
-  if (filterType === 'all') {
-    renderTasksGrid(cachedTasks);
-  } else {
-    const filtered = cachedTasks.filter(t => t.difficulty.toLowerCase() === filterType.toLowerCase());
-    renderTasksGrid(filtered);
-  }
-}
-
-/**
- * ==========================================================================
- * AI COUNSELOR CHAT SYSTEM LOGIC OPERATIONS
- * ==========================================================================
- */
-
-function syncAIChatViewportConsole() {
-  const container = document.getElementById('chat-viewport-history');
-  if (container && container.children.length <= 1) {
-    container.innerHTML = `
-      <div class="chat-bubble ai-msg">
-         <div class="bubble-avatar">AI</div>
-         <div class="bubble-body">Assalam-o-Alaikum! Welcome to Micro-Skill Hub Career Core Advisor Dashboard. Ask me anything regarding stack alignment tracks optimizations!</div>
-      </div>
-    `;
-  }
-}
-
-async function handleSendMessage() {
-  const input = document.getElementById('chat-input-field');
-  const msgText = input.value.trim();
-  if (!msgText) return;
-
-  input.value = '';
-  const container = document.getElementById('chat-viewport-history');
-
-  const userBubble = document.createElement('div');
-  userBubble.className = 'chat-bubble user-msg';
-  userBubble.innerHTML = `<div class="bubble-body">${msgText}</div>`;
-  container.appendChild(userBubble);
-  container.scrollTop = container.scrollHeight;
-
-  const typingBubble = document.createElement('div');
-  typingBubble.className = 'chat-bubble ai-msg typing-indicator-bubble';
-  typingBubble.innerHTML = `
-    <div class="bubble-avatar">AI</div>
-    <div class="typing-indicator-dots"><span></span><span></span><span></span></div>
-  `;
-  container.appendChild(typingBubble);
-  container.scrollTop = container.scrollHeight;
-
-  try {
-    const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/chat`, {
-      method: 'POST',
-      body: JSON.stringify({ message: msgText })
-    });
-    const data = await res.json();
-    typingBubble.remove();
-
-    const aiBubble = document.createElement('div');
-    aiBubble.className = 'chat-bubble ai-msg';
-    aiBubble.innerHTML = `
-      <div class="bubble-avatar">AI</div>
-      <div class="bubble-body">${data.reply}</div>
-    `;
-    container.appendChild(aiBubble);
-    container.scrollTop = container.scrollHeight;
-  } catch (err) {
-    typingBubble.remove();
-    showToast("AI network connection latency error.", 'error');
-  }
-}
-
-/**
- * ==========================================================================
- * ADMINISTRATIVE DASHBOARD PIPELINE METRICS ENGINE
- * ==========================================================================
- */
-
-async function fetchAdminMetricsEngine() {
-  showLoading();
-  try {
-    const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/admin/metrics`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Administrative structural analytics fetch error.");
-
-    if(document.getElementById('admin-total-students')) document.getElementById('admin-total-students').textContent = data.total_students;
-    if(document.getElementById('admin-total-tasks')) document.getElementById('admin-total-tasks').textContent = data.total_tasks;
-    if(document.getElementById('admin-pending-submissions')) document.getElementById('admin-pending-submissions').textContent = data.pending_submissions;
-
-    await fetchAdminUsersReport();
-    await fetchAdminTasksCatalogList();
-    await loadAdminSubmissionsAuditQueue();
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    hideLoading();
-  }
-}
-
-async function fetchAdminUsersReport() {
-  const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/admin/users`);
-  const users = await res.json();
-  
-  const tbody = document.querySelector('#section-admin table:nth-of-type(1) tbody');
-  if(!tbody) return;
-  tbody.innerHTML = '';
-  
-  users.forEach(u => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><code>#${u.user_id}</code></td>
-      <td>${u.full_name}</td>
-      <td>${u.email}</td>
-      <td>${u.roll_number || 'N/A'}</td>
-      <td><span class="badge badge-success">${u.skill_count} Active Track</span></td>
-      <td><strong>${u.total_xp} XP</strong></td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-async function fetchAdminTasksCatalogList() {
-  const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/student/tasks`);
-  const tasks = await res.json();
-  
-  const tbody = document.getElementById('admin-tasks-tbody-render');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-
-  tasks.forEach(t => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td style="padding:10px;"><code>#${t.task_id}</code></td>
-      <td style="padding:10px; font-weight:600;">${t.title}</td>
-      <td style="padding:10px;"><span class="badge badge-hot">${t.difficulty}</span></td>
-      <td style="padding:10px; color:var(--purple); font-weight:700;">${t.reward_xp} XP</td>
-      <td style="padding:10px;">
-          <button class="btn btn-sm btn-danger" onclick="handlePurgeTaskStructureRow(${t.task_id})" style="padding:2px 8px;">Delete Task</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-async function loadAdminSubmissionsAuditQueue() {
-  const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/admin/submissions`);
-  const subs = await res.json();
-  
-  const tbody = document.getElementById('admin-submissions-tbody-render');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-
-  if (subs.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" style="padding:15px; text-align:center; color:var(--text-muted);">Audit pipeline workspace structural queue is empty.</td></tr>`;
-    return;
-  }
-
-  subs.forEach(s => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td style="padding:10px;">
-          <strong>${s.student_name}</strong><br/>
-          <small style="color:var(--text-muted);">${s.student_email}</small>
-      </td>
-      <td style="padding:10px; font-size:0.9rem;">${s.task_title}</td>
-      <td style="padding:10px;">
-          <div style="max-width:260px; overflow-x:auto; background:#1e2235; padding:6px; border-radius:4px; font-family:monospace; font-size:0.8rem; color:var(--teal);">
-             ${s.submission_text}
-          </div>
-      </td>
-      <td style="padding:10px;">
-          <div style="display:flex; gap:6px;">
-             <button class="btn btn-sm btn-success" onclick="handleProcessAuditDecision(${s.application_id}, 'approved')" style="padding:2px 8px;">Approve</button>
-             <button class="btn btn-sm btn-danger" onclick="handleProcessAuditDecision(${s.application_id}, 'rejected')" style="padding:2px 8px;">Reject</button>
-          </div>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-async function handleCreateNewTaskFormSubmission(e) {
-  e.preventDefault();
-  const title = document.getElementById('task-title-input').value;
-  const description = document.getElementById('task-desc-input').value;
-  const difficulty = document.getElementById('task-diff-select').value;
-  const reward_xp = parseInt(document.getElementById('task-xp-input').value);
-  
-  const skillCheckboxes = document.querySelectorAll('input[name="admin-skills-selector"]:checked');
-  const required_skills = Array.from(skillCheckboxes).map(cb => parseInt(cb.value));
-
-  if (!title || !description || !difficulty || isNaN(reward_xp) || required_skills.length === 0) {
-    showToast("Please provide comprehensive execution profile metadata configurations.", 'error');
-    return;
-  }
-
-  const payload = { title, description, difficulty, reward_xp, required_skills };
-  showLoading();
-  try {
-    const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/admin/tasks`, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Error creating task structure configuration.");
-
-    showToast("Operational assignment entity registry deployed onto dynamic platform matrices.");
-    document.getElementById('form-admin-create-task').reset();
-    fetchAdminMetricsEngine();
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    hideLoading();
-  }
-}
-
-async function handleProcessAuditDecision(appId, decisionStatus) {
-  showLoading();
-  try {
-    const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/admin/submissions/review`, {
-      method: 'POST',
-      body: JSON.stringify({ application_id: appId, status: decisionStatus })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Pipeline authorization audit status change state fault.");
-
-    showToast(`Student tracking index structural assignment execution resolution updated to: ${decisionStatus}`);
-    fetchAdminMetricsEngine();
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    hideLoading();
-  }
-}
-
-async function handlePurgeTaskStructureRow(taskId) {
-  if (!confirm("Are you absolutely certain you wish to permanently purge this task assignment structural entity from tables records?")) return;
-  showLoading();
-  try {
-    const res = await makeAuthenticatedRequest(`${BACKEND_URL}/api/admin/tasks/${taskId}`, {
-      method: 'DELETE'
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Transaction sequence deletion structural failure.");
-
-    showToast("Purged task structure configuration safely from data tables records.");
-    fetchAdminMetricsEngine();
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    hideLoading();
-  }
-}
-
-/**
- * ==========================================================================
- * MASTER APP LIFE CYCLE CORE ENGINE COUPLING SETUP
- * ==========================================================================
- */
-
-function init() {
-  if (document.getElementById('form-login')) document.getElementById('form-login').addEventListener('submit', handleLogin);
-  if (document.getElementById('form-register-submit')) document.getElementById('form-register-submit').addEventListener('submit', handleRegister);
-  if (document.getElementById('form-add-skill')) document.getElementById('form-add-skill').addEventListener('submit', handleAddSkill);
-  if (document.getElementById('form-chat-input')) document.getElementById('form-chat-input').addEventListener('submit', function(e) { e.preventDefault(); handleSendMessage(); });
-  if (document.getElementById('btn-logout')) document.getElementById('btn-logout').addEventListener('click', handleLogout);
-  if (document.getElementById('task-search-input')) document.getElementById('task-search-input').addEventListener('input', handleSearch);
-  if (document.getElementById('form-admin-create-task')) document.getElementById('form-admin-create-task').addEventListener('submit', handleCreateNewTaskFormSubmission);
-
-  document.querySelectorAll('.filter-chips-row .chip').forEach(chip => {
-    chip.addEventListener('click', function() {
-      handleFilterChip(this.textContent.trim().toLowerCase().includes('all') ? 'all' : this.textContent.trim(), this);
-    });
-  });
-
-  setupNavigation();
-  initPasswordSecurityFeatures();
-
-  const token = getToken();
-  const cachedUserString = localStorage.getItem('msh_user');
-
-  if (token && cachedUserString) {
     try {
-      const userObj = JSON.parse(cachedUserString);
-      syncNavbarState(userObj);
-      navigateTo(userObj.role === 'admin' ? 'section-admin' : 'section-dashboard');
-    } catch (err) { handleLogout(); }
-  } else {
-    // Agar user logged in nahi hai toh strictly home/hero section par ruko
-    navigateTo('section-home');
-  }
+        // Fetch applied apps metric state array to map counts completely
+        const resApps = await fetch(`${API_BASE_URL}/tasks/my-applications`, {
+            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        });
+        const apps = resApps.ok ? await resApps.json() : [];
+        const completedCount = apps.filter(a => a.status === 'completed').length;
+        document.getElementById("stat-tasks-count").textContent = completedCount;
+
+        // Fetch user active skills array details
+        const resSk = await fetch(`${API_BASE_URL}/skills/my-skills`, {
+            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        });
+        const skills = resSk.ok ? await resSk.json() : [];
+        document.getElementById("stat-skills-count").textContent = skills.length;
+
+        // Dynamic XP Calculation based on completed application records profiles array list
+        let calculatedXp = 0;
+        apps.forEach(app => {
+            if (app.status === "completed") {
+                calculatedXp += app.reward_xp || 0;
+            }
+        });
+        
+        document.getElementById("user-current-xp").textContent = calculatedXp;
+
+        // Manage Level progress bar computations dynamically
+        let rankStr = "Level 1 Novice Engineer";
+        let targetXp = 500;
+        let fillPct = (calculatedXp / targetXp) * 100;
+
+        if (calculatedXp >= 500 && calculatedXp < 1200) {
+            rankStr = "Level 2 Competent System Engineer";
+            targetXp = 1200;
+            fillPct = (calculatedXp / targetXp) * 100;
+        } else if (calculatedXp >= 1200) {
+            rankStr = "Level 3 Senior Enterprise Architect Consultant";
+            targetXp = calculatedXp + 500; 
+            fillPct = 100;
+        }
+
+        document.getElementById("user-current-rank").textContent = rankStr;
+        document.getElementById("user-needed-xp").textContent = targetXp;
+        document.getElementById("user-xp-bar").style.width = `${Math.min(fillPct, 100)}%`;
+        document.getElementById("user-next-rank").textContent = `XP Milestone Track: (${calculatedXp}/${targetXp} XP Completed)`;
+
+        // Render dashboard linear metrics bars stack component UI rendering pipeline
+        const dashboardSkContainer = document.getElementById("dashboard-skills-container");
+        dashboardSkContainer.innerHTML = skills.length === 0 ? "<p style='color:var(--text-muted); font-size:0.9rem;'>No verified tracking metrics on profile.</p>" : "";
+        
+        skills.forEach(sk => {
+            const color = sk.proficiency_level === "Advanced" ? "var(--teal)" : sk.proficiency_level === "Intermediate" ? "var(--purple)" : "var(--amber)";
+            dashboardSkContainer.innerHTML += `
+                <div class="skill-progress-item">
+                   <div class="skill-meta"><span>${sk.skill_name}</span><strong style="color:${color}">${sk.proficiency_level}</strong></div>
+                   <div class="bar-bg"><div class="bar-fill" style="width: ${sk.proficiency_percent}%; background-color: ${color}"></div></div>
+                </div>`;
+        });
+
+        // Load automated system AI engine recommendations matching framework matrix list block
+        const resRec = await fetch(`${API_BASE_URL}/match/recommend`, {
+            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        });
+        const recs = resRec.ok ? await resRec.json() : [];
+        const recContainer = document.getElementById("dashboard-rec-container");
+        recContainer.innerHTML = recs.length === 0 ? "<p style='color:var(--text-muted); font-size:0.9rem;'>Add skills to initialize AI recommendation models.</p>" : "";
+        
+        recs.forEach(task => {
+            recContainer.innerHTML += `
+                <div style="background:#0b0c13; padding:0.75rem; border-radius:6px; margin-bottom:0.75rem; border-left:3px solid var(--purple);">
+                   <div style="display:flex; justify-content:space-between; font-size:0.85rem;"><span style="color:var(--text-muted)">Match Confidence: ${task.match_percent}%</span><span style="color:var(--teal)">+${task.reward_xp} XP</span></div>
+                   <h4 style="margin:2px 0; color:#fff">${task.title}</h4>
+                   <button class="btn btn-purple btn-sm" style="margin-top:5px; width:100%; padding:2px;" onclick="navigateTo('section-tasks')">View Blueprint</button>
+                </div>`;
+        });
+
+    } catch (err) {
+        console.error("Dashboard engine rendering failure:", err);
+    }
 }
 
-document.addEventListener('DOMContentLoaded', init);
+async function loadSkillsManagerData() {
+    try {
+        // Dynamic fetch of master skills dropdown list records profiles array configuration matrix
+        const resAll = await fetch(`${API_BASE_URL}/skills/all`);
+        const allSkills = await resAll.json();
+        
+        const dropdown = document.getElementById("new-skill-category");
+        dropdown.innerHTML = "";
+        allSkills.forEach(s => {
+            dropdown.innerHTML += `<option value="${s.skill_id}">${s.skill_name} [${s.category}]</option>`;
+        });
 
-// Global bindings for HTML onclick contexts execution mapping
-window.navigateTo = navigateTo;
-window.handleApplyTask = handleApplyTask;
-window.handleSubmitWorkProof = handleSubmitWorkProof;
-window.handleDeleteUserSkill = handleDeleteUserSkill;
-window.handleProcessAuditDecision = handleProcessAuditDecision;
-window.handlePurgeTaskStructureRow = handlePurgeTaskStructureRow;
+        // Load dynamic verification user skills items matrix container cards grid row
+        const resMy = await fetch(`${API_BASE_URL}/skills/my-skills`, {
+            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        });
+        const mySkills = await resMy.json();
+        const container = document.getElementById("skills-matrix-container");
+        container.innerHTML = mySkills.length === 0 ? "<p style='color:var(--text-muted)'>Workspace tracking register holds zero mapped skills.</p>" : "";
+
+        mySkills.forEach(sk => {
+            container.innerHTML += `
+               <div class="matrix-card" style="background: var(--bg-card); padding:1rem; border-radius:8px; border:1px solid var(--border-color);">
+                  <span class="badge badge-hot" style="margin-bottom:5px;">MAPPED INDEX</span>
+                  <h3>${sk.skill_name}</h3>
+                  <p style="color: var(--text-muted); font-size:0.9rem; margin: 5px 0;">Proficiency Track Level: <b style="color:var(--purple)">${sk.proficiency_level}</b></p>
+                  <button class="btn btn-danger btn-sm" style="margin-top:10px; width:100%" onclick="deleteSkillMapping(${sk.user_skill_id})">Purge Skill</button>
+               </div>`;
+        });
+    } catch (err) {
+        showToast("Error processing skills setup infrastructure layout pipelines.", "error");
+    }
+}
+
+async function deleteSkillMapping(id) {
+    if (!confirm("Are you certain you want to purge this skill profile metrics trace reference?")) return;
+    toggleSpinner(true);
+    try {
+        const res = await fetch(`${API_BASE_URL}/skills/delete`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${localStorage.getItem("token")}`
+            },
+            body: JSON.stringify({ user_skill_id: id })
+        });
+        if (res.ok) {
+            showToast("Skill structure mapping removed safely.");
+            loadSkillsManagerData();
+        }
+    } catch {
+        showToast("System failed processing data transaction request delete workflow.", "error");
+    } finally {
+        toggleSpinner(false);
+    }
+}
+
+async function loadAvailableTasks() {
+    try {
+        const resTasks = await fetch(`${API_BASE_URL}/tasks/all`, {
+            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        });
+        const tasks = await resTasks.json();
+
+        const resApps = await fetch(`${API_BASE_URL}/tasks/my-applications`, {
+            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        });
+        const apps = await resApps.json();
+
+        // Establish quick lookup database dictionaries mapping array values lists state flags object maps
+        const appStateMap = {};
+        const appTextMap = {};
+        apps.forEach(a => {
+            appStateMap[a.title] = a.status; // Mapping through structural entity title references safely
+            appTextMap[a.title] = a.app_id;
+        });
+
+        const container = document.getElementById("tasks-cards-container");
+        container.innerHTML = "";
+
+        tasks.forEach(task => {
+            // Apply filtering mechanics configurations rules blocks sequentially
+            if (activeDifficultyFilter !== "all" && task.difficulty !== activeDifficultyFilter) return;
+
+            const currentStatus = appStateMap[task.title] || "unapplied";
+            
+            let operationalActionButtonHTML = "";
+            if (currentStatus === "unapplied") {
+                operationalActionButtonHTML = `<button class="btn btn-purple" style="width:100%; margin-top:auto;" onclick="applyForTaskBlueprint(${task.task_id})">Accept Code Sprint Task</button>`;
+            } else if (currentStatus === "pending") {
+                operationalActionButtonHTML = `
+                    <div style="margin-top:auto; display:flex; flex-direction:column; gap:5px;">
+                       <span class="badge badge-hot" style="text-align:center; padding:5px;">IN REVIEW UNDER EVALUATION</span>
+                       <button class="btn btn-success btn-sm" onclick="openTestingSandboxWorkspace(${appTextMap[task.title]})">Update/Resubmit Raw Code</button>
+                    </div>`;
+            } else if (currentStatus === "completed") {
+                operationalActionButtonHTML = `<button class="btn btn-outline" style="width:100%; margin-top:auto; border-color:var(--teal); color:var(--teal); cursor:default;" disabled>✓ Task Approved & XP Awarded</button>`;
+            } else if (currentStatus === "rejected") {
+                operationalActionButtonHTML = `
+                    <div style="margin-top:auto; display:flex; flex-direction:column; gap:5px;">
+                       <span class="badge btn-danger" style="text-align:center; padding:5px;">REJECTED BY CODE AUDITOR</span>
+                       <button class="btn btn-purple btn-sm" onclick="openTestingSandboxWorkspace(${appTextMap[task.title]})">Submit Corrected Code Script</button>
+                    </div>`;
+            }
+
+            container.innerHTML += `
+               <div class="task-card">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                     <span class="badge ${task.difficulty==='Advanced'?'badge-hot':'badge-success'}">${task.difficulty}</span>
+                     <strong style="color:var(--teal)">+${task.reward_xp} XP</strong>
+                  </div>
+                  <h3>${task.title}</h3>
+                  <p style="color:var(--text-muted); font-size:0.9rem; margin:10px 0; line-height:1.4;">${task.description}</p>
+                  ${operationalActionButtonHTML}
+               </div>`;
+        });
+
+    } catch (err) {
+        showToast("Error configuring tasks interface dashboard panels.", "error");
+    }
+}
+
+function setupFilterChips() {
+    const chips = document.querySelectorAll("#difficulty-chips .chip");
+    chips.forEach(chip => {
+        chip.addEventListener("click", () => {
+            chips.forEach(c => c.classList.remove("active"));
+            chip.classList.add("active");
+            activeDifficultyFilter = chip.getAttribute("data-filter");
+            loadAvailableTasks();
+        });
+    });
+
+    // In-line instant search bar event tracking configuration metrics setup routines
+    document.getElementById("task-search-input").addEventListener("input", (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        const cards = document.querySelectorAll("#tasks-cards-container .task-card");
+        cards.forEach(card => {
+            const title = card.querySelector("h3").textContent.toLowerCase();
+            card.style.display = title.includes(query) ? "flex" : "none";
+        });
+    });
+}
+
+async function applyForTaskBlueprint(taskId) {
+    toggleSpinner(true);
+    try {
+        const res = await fetch(`${API_BASE_URL}/tasks/apply`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${localStorage.getItem("token")}`
+            },
+            body: JSON.stringify({ task_id: taskId })
+        });
+        if (res.ok) {
+            showToast("Task assigned completely. Code Workspace Sandbox unlocked below!");
+            loadAvailableTasks();
+        } else {
+            const d = await res.json();
+            showToast(d.detail || "Error claiming blueprint entity mapping.", "error");
+        }
+    } catch {
+        showToast("Claim system transactional processing error.", "error");
+    } finally {
+        toggleSpinner(false);
+    }
+}
+
+// TOGGLE VISIBILITY INTERFACE FUNCTION FOR EMBEDDED CODE/TEXT AREA BOX
+function openTestingSandboxWorkspace(applicationId) {
+    document.getElementById("submit-task-app-id").value = applicationId;
+    document.getElementById("testing-submission-workspace").style.display = "block";
+    document.getElementById("submit-raw-code").focus();
+    
+    // Smooth scroll down layout focus logic view
+    document.getElementById("testing-submission-workspace").scrollIntoView({ behavior: "smooth" });
+}
+
+async function loadGlobalLeaderboard() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/leaderboard/global`, {
+            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        });
+        const data = await res.json();
+        const tbody = document.getElementById("leaderboard-entries");
+        tbody.innerHTML = "";
+
+        if (!data.ranking || data.ranking.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="padding:15px; text-align:center; color:var(--text-muted)">Syncing ranking tracking indexes metrics databases complete...</td></tr>`;
+            return;
+        }
+
+        data.ranking.forEach((user, index) => {
+            const rank = index + 1;
+            let rowStyle = "";
+            let rankMedal = rank;
+            
+            if (rank === 1) { rowStyle = "background:rgba(255,179,0,0.05); font-weight:bold;"; rankMedal = "🥇 1"; }
+            else if (rank === 2) { rowStyle = "background:rgba(255,255,255,0.02);"; rankMedal = "🥈 2"; }
+            else if (rank === 3) { rankMedal = "🥉 3"; }
+
+            tbody.innerHTML += `
+               <tr style="border-bottom:1px solid var(--border-color); ${rowStyle}">
+                  <td style="padding:12px; color:var(--amber)"><b>${rankMedal}</b></td>
+                  <td style="padding:12px; color:#fff">${user.name}</td>
+                  <td style="padding:12px;"><span class="chip" style="padding:2px 8px; cursor:default;">${user.role.toUpperCase()}</span></td>
+                  <td style="padding:12px; color:var(--teal)"><b>${user.xp} XP</b></td>
+               </tr>`;
+        });
+    } catch {
+        showToast("Error processing data from leaderboard endpoint matrix pipeline.", "error");
+    }
+}
+
+function appendChatBubble(text, className) {
+    const box = document.getElementById("chat-stream-box");
+    const bubble = document.createElement("div");
+    bubble.className = `chat-bubble ${className}`;
+    
+    // Formatting code chunks blocks within chat display modules safely
+    if (className === "ai-msg") {
+        bubble.innerHTML = `<div><b>Copilot AI:</b><p style="white-space:pre-wrap; margin-top:4px; font-size:0.95rem;">${text}</p></div>`;
+    } else {
+        bubble.innerHTML = `<div><b>You:</b><p style="margin-top:2px;">${text}</p></div>`;
+    }
+    
+    box.appendChild(bubble);
+    box.scrollTop = box.scrollHeight;
+}
+
+// ==========================================================================
+// ADMIN CONSOLE INTERFACE CONTROLLERS MODULES
+// ==========================================================================
+async function loadAdminConsoleData() {
+    if (localStorage.getItem("role") !== "admin") return;
+
+    try {
+        // Dropdown skill selection initialization inside system admin task creator panel container
+        const resAllSk = await fetch(`${API_BASE_URL}/skills/all`);
+        const allSk = await resAllSk.json();
+        const adminDropdown = document.getElementById("admin-task-skill-select");
+        adminDropdown.innerHTML = "";
+        allSk.forEach(s => {
+            adminDropdown.innerHTML += `<option value="${s.skill_id}">${s.skill_name} [${s.category}]</option>`;
+        });
+
+        // Load system state counters metrics panels rows values indices positions completely
+        const resStats = await fetch(`${API_BASE_URL}/admin/stats`, {
+            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        });
+        const stats = await resStats.json();
+        document.getElementById("admin-stat-students").textContent = stats.students || 0;
+        document.getElementById("admin-stat-pending").textContent = stats.pending || 0;
+        document.getElementById("admin-stat-tasks").textContent = stats.tasks || 0;
+
+        // Fetch blueprints list layout rows setup tracking components
+        const resTasks = await fetch(`${API_BASE_URL}/tasks/all`, {
+            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        });
+        const tasks = await resTasks.json();
+        const tasksTbody = document.getElementById("admin-tasks-tbody");
+        tasksTbody.innerHTML = "";
+        tasks.forEach(t => {
+            tasksTbody.innerHTML += `
+               <tr style="border-bottom:1px solid var(--border-color)">
+                  <td style="padding:10px; color:var(--text-muted)">#${t.task_id}</td>
+                  <td style="padding:10px; font-weight:600; color:#fff">${t.title}</td>
+                  <td style="padding:10px;"><span class="badge badge-success">${t.difficulty}</span></td>
+                  <td style="padding:10px; color:var(--teal)">${t.reward_xp} XP</td>
+                  <td style="padding:10px;"><button class="btn btn-danger btn-sm" onclick="purgeTaskBlueprintByAdmin(${t.task_id})">Delete Blueprint</button></td>
+               </tr>`;
+        });
+
+        // FIXED: Display raw code block artifacts directly inside admin audit panel dashboard grids rows elements list view 
+        const resSubs = await fetch(`${API_BASE_URL}/admin/submissions`, {
+            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        });
+        const subs = await resSubs.json();
+        const subsTbody = document.getElementById("admin-submissions-tbody");
+        subsTbody.innerHTML = "";
+
+        if (subs.length === 0) {
+            subsTbody.innerHTML = `<tr><td colspan="4" style="padding:15px; text-align:center; color:var(--text-muted)">Submission evaluation queue register is currently empty.</td></tr>`;
+            return;
+        }
+
+        subs.forEach(sub => {
+            // Escape code elements block structures text characters string elements strings arrays safely to block browser scripts parsing execution
+            const safeCodeSnippet = (sub.submission_text || "/* Empty Code Element Body */")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+
+            subsTbody.innerHTML += `
+               <tr style="border-bottom:1px solid var(--border-color)">
+                  <td style="padding:10px; color:var(--purple)"><b>${sub.student_email}</b><br><small style="color:var(--text-muted)">${sub.student_name || 'Student'}</small></td>
+                  <td style="padding:10px; color:#fff">${sub.task_title}</td>
+                  <td style="padding:10px;">
+                     <div class="code-preview-box">${safeCodeSnippet}</div>
+                  </td>
+                  <td style="padding:10px;">
+                     <div style="display:flex; gap:5px;">
+                        <button class="btn btn-success btn-sm" onclick="reviewStudentSubmissionArtifact(${sub.app_id}, 'approve')">Approve Work</button>
+                        <button class="btn btn-danger btn-sm" onclick="reviewStudentSubmissionArtifact(${sub.app_id}, 'reject')">Reject</button>
+                     </div>
+                  </td>
+               </tr>`;
+        });
+
+    } catch (err) {
+        console.error("Administrative management console initialization fault error tracking sequence exception:", err);
+    }
+}
+
+async function reviewStudentSubmissionArtifact(applicationId, actionDecisionString) {
+    toggleSpinner(true);
+    try {
+        const res = await fetch(`${API_BASE_URL}/admin/review`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${localStorage.getItem("token")}`
+            },
+            body: JSON.stringify({ app_id: applicationId, action: actionDecisionString })
+        });
+        if (res.ok) {
+            showToast(`Submission successfully transitioned to: ${actionDecisionString.toUpperCase()}`);
+            loadAdminConsoleData();
+        }
+    } catch {
+        showToast("Error logging evaluation decision audit.", "error");
+    } finally {
+        toggleSpinner(false);
+    }
+}
+
+async function purgeTaskBlueprintByAdmin(taskId) {
+    if (!confirm("Are you certain you want to permanently delete this master task blueprint? This action is irreversible.")) return;
+    toggleSpinner(true);
+    try {
+        const res = await fetch(`${API_BASE_URL}/admin/delete-task/${taskId}`, {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        });
+        if (res.ok) {
+            showToast("Master task blueprint completely deleted.");
+            loadAdminConsoleData();
+        } else {
+            const data = await res.json();
+            showToast(data.detail || "Error wiping database blueprint.", "error");
+        }
+    } catch {
+        showToast("Purge transmission routine failure.", "error");
+    } finally {
+        toggleSpinner(false);
+    }
+}
