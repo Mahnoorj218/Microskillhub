@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Micro-Skill Hub - Skills & Task Tracker</title>
+  <style>
+    /* ==========================================================================
+       CORE STYLING SYSTEM (Dark Mode Theme Infrastructure)
+       ========================================================================== */
+    :root {
+      --bg-dark: #0f111a;
+      --bg-card: #161925;
+      --purple: #7c4dff;
+      --teal: #00bfa5;
+      --amber: #ffb300;
+      --red: #ff5252;
+      --text-main: #f5f6fa;
+      --text-muted: #8b9bb4;
+      --border-color: #262938;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Navbar */
+    header.main-navbar {
+      background-color: var(--bg-card);
+      border-bottom: 1px solid var(--border-color);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .nav-logo {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--purple);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: var(--text-main);
+    }
+
+    .auth-only { display: none; }
+
+    /* Layout Elements */
+    main.spa-content {
+      flex: 1;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    section {
+      animation: fadeIn 0.3s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Cards Matrix */
+    .dashboard-grid, .matrix-grid, .tasks-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .glass-card, .matrix-card, .task-card, .rec-card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Common Buttons UI */
+    .btn {
+      padding: 0.6rem 1.2rem;
+      border-radius: 6px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-purple { background-color: var(--purple); color: white; }
+    .btn-purple:hover { background-color: #6236ff; }
+    .btn-outline { background-color: transparent; border: 1px solid var(--border-color); color: var(--text-main); }
+    .btn-outline:hover { background-color: var(--border-color); }
+    .btn-success { background-color: var(--teal); color: white; }
+    .btn-danger { background-color: var(--red); color: white; }
+    .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      font-size: 0.75rem;
+      border-radius: 4px;
+      font-weight: bold;
+      background: #222;
+    }
+    .badge-success { background-color: rgba(0, 191, 165, 0.15); color: var(--teal); }
+    .badge-hot { background-color: rgba(124, 77, 255, 0.15); color: var(--purple); }
+
+    /* Forms Infrastructure */
+    .form-group {
+      margin-bottom: 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .form-group input, .form-group select {
+      padding: 0.75rem;
+      background-color: #0b0c13;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: var(--text-main);
+      font-size: 1rem;
+    }
+    .form-group input:focus { border-color: var(--purple); outline: none; }
+
+    /* Skill Progression Track Bar */
+    .skill-progress-item { margin-bottom: 1rem; }
+    .skill-meta { display: flex; justify-content: space-between; margin-bottom: 0.3rem; font-size: 0.9rem; }
+    .bar-bg { background-color: #0b0c13; height: 8px; border-radius: 4px; overflow: hidden; }
+    .bar-fill { height: 100%; width: 0%; transition: width 0.5s ease-out; }
+
+    /* Global Custom Loading Spinner Modals System */
+    #loading-spinner {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(15, 17, 26, 0.8); display: none; justify-content: center;
+      align-items: center; z-index: 9999;
+    }
+    .spinner-object {
+      width: 50px; height: 50px; border: 5px solid #222; border-top-color: var(--purple);
+      border-radius: 50%; animation: spin 1s infinite linear;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Toast System Status Popup Container Box */
+    #toast {
+      position: fixed; bottom: 20px; right: 20px; display: none;
+      padding: 1rem 1.5rem; border-radius: 8px; color: white; font-weight: 600;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 10000; animation: slideIn 0.3s ease;
+    }
+    #toast.success { background-color: var(--teal); border-left: 5px solid #00897b; }
+    #toast.error { background-color: var(--red); border-left: 5px solid #d32f2f; }
+    @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+    /* Filter Chips Infrastructure styling specs */
+    .filter-chips-row { display: flex; gap: 0.5rem; margin: 1rem 0; flex-wrap: wrap; }
+    .chip { padding: 0.4rem 1rem; border-radius: 20px; background: var(--bg-card); border: 1px solid var(--border-color); cursor: pointer; font-size: 0.85rem; color: var(--text-muted); }
+    .chip.active { background: var(--purple); color: white; border-color: var(--purple); }
+
+    /* Chat system window mechanics framework modules elements */
+    #chat-stream-box { height: 350px; overflow-y: auto; background: #0b0c13; border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+    .chat-bubble { display: flex; gap: 0.5rem; max-width: 80%; padding: 0.75rem 1rem; border-radius: 12px; }
+    .user-msg { background: var(--purple); align-self: flex-end; border-bottom-right-radius: 0; }
+    .ai-msg { background: var(--bg-card); border: 1px solid var(--border-color); align-self: flex-start; border-bottom-left-radius: 0; }
+  </style>
+</head>
+<body>
+
+  <header class="main-navbar">
+    <a href="#" class="nav-logo" onclick="navigateTo('section-home')">⚡ MicroSkillHub</a>
+    <nav class="nav-links">
+      <div id="auth-logged-out" style="display: flex; gap: 1.5rem;">
+        <a href="#" onclick="navigateTo('section-login')">Login</a>
+        <a href="#" onclick="navigateTo('section-register')" class="btn btn-purple" style="color: white; padding: 0.4rem 1rem;">Get Started</a>
+      </div>
+      
+      <div id="auth-logged-in" style="display: none; align-items: center; gap: 1.5rem;">
+        <a href="#" onclick="navigateTo('section-dashboard')">Dashboard</a>
+        <a href="#" onclick="navigateTo('section-skills')">Skills Manager</a>
+        <a href="#" onclick="navigateTo('section-tasks')">Available Tasks</a>
+        <a href="#" onclick="navigateTo('section-leaderboard')">🏆 Leaderboard</a>
+        <a href="#" onclick="navigateTo('section-ai')">SkillCopilot AI</a>
+        <a href="#" id="nav-admin" onclick="navigateTo('section-admin')" style="display:none; color: var(--amber); font-weight: bold;">Admin Console</a>
+        <span id="user-display-name" style="color: var(--teal); font-size: 0.9rem; font-weight: 600;"></span>
+        <button id="btn-logout" class="btn btn-outline btn-sm">Sign Out</button>
+      </div>
+    </nav>
+  </header>
+
+  <main class="spa-content">
+
+    <section id="section-home">
+      <div style="text-align: center; padding: 4rem 1rem; max-width: 800px; margin: 0 auto;">
+        <h1 style="font-size: 3.5rem; font-weight: 800; line-height: 1.1; margin-bottom: 1.5rem;">Accelerate Your Engineering Profile & Skills Index</h1>
+        <p style="color: var(--text-muted); font-size: 1.2rem; margin-bottom: 2rem;">An AI-driven platform to track your technical skills, complete coding tasks, and boost your professional rank.</p>
+        <button class="btn btn-purple" onclick="navigateTo('section-register')" style="font-size: 1.1rem; padding: 0.8rem 2rem;">Get Started</button>
+      </div>
+    </section>
+
+    <section id="section-login" style="display: none; max-width: 450px; margin: 2rem auto;">
+      <div class="glass-card">
+        <h2 style="margin-bottom: 0.5rem;">Welcome Back</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Sign in to manage your profile and view available tasks.</p>
+        <form id="form-login">
+          <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="login-email" required placeholder="name@domain.com">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="login-password" required placeholder="••••••••">
+          </div>
+          <div class="form-group">
+            <label>Login As</label>
+            <select id="login-role">
+              <option value="student">Student Account</option>
+              <option value="admin">Platform Administrator</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-purple" style="width: 100%; margin-top: 1rem;">Login</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="section-register" style="display: none; max-width: 500px; margin: 2rem auto;">
+      <div class="glass-card">
+        <h2 style="margin-bottom: 0.5rem;">Create Your Account</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Enter your details to create a new account.</p>
+        <form id="form-register">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label>First Name</label>
+              <input type="text" id="reg-firstname" required placeholder="John">
+            </div>
+            <div class="form-group">
+              <label>Last Name</label>
+              <input type="text" id="reg-lastname" required placeholder="Doe">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="reg-email" required placeholder="john.doe@university.edu">
+          </div>
+          
+          <div class="form-group" style="position: relative;">
+            <label>Password</label>
+            <div style="display: flex; gap: 5px;">
+              <input type="password" id="reg-password" required placeholder="Create strong password" style="flex: 1;">
+              <button type="button" id="toggle-reg-password" class="btn btn-outline btn-sm">👁️ Show</button>
+            </div>
+            <div id="password-strength-wrapper" style="margin-top: 5px; display: none;">
+              <div id="strength-bar" style="height: 5px; width: 0%; background-color: var(--red); transition: all 0.3s ease; border-radius: 3px;"></div>
+              <small id="strength-text" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; display: block;"></small>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Verify Password</label>
+            <input type="password" id="reg-confirm-password" required placeholder="••••••••">
+          </div>
+
+          <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label style="margin-bottom: 0.5rem;">Choose Your Role</label>
+            <div style="display:flex; gap: 2rem;">
+              <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;"><input type="radio" name="reg-role" value="student" checked> Student</label>
+              <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;"><input type="radio" name="reg-role" value="admin"> Admin</label>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-purple" style="width: 100%;">Sign Up</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="section-dashboard" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <h2>Performance Dashboard</h2>
+          <p id="user-current-rank" style="color: var(--purple); font-weight: 700; font-size: 1.1rem; margin-top: 0.2rem;">Level 1 Novice Learner</p>
+        </div>
+        <div style="text-align: right; background: rgba(255,255,255,0.02); padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color);">
+          <span style="font-size: 0.85rem; color: var(--text-muted); display:block;">Total Earned Points</span>
+          <strong id="user-current-xp" style="font-size: 1.8rem; color: var(--teal);">0</strong> <span style="font-size: 0.85rem; color: var(--text-muted);">XP</span>
+        </div>
+      </div>
+
+      <div class="glass-card" style="margin-bottom: 2rem; padding: 1.2rem;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text-muted);">
+          <span id="user-next-rank">Next Milestone: Syncing progress...</span>
+          <span>Target: <span id="user-needed-xp">1,000</span> XP</span>
+        </div>
+        <div class="bar-bg" style="height: 12px; border-radius: 6px;">
+          <div id="user-xp-bar" class="bar-fill" style="background: linear-gradient(90deg, var(--purple), var(--teal)); width: 0%;"></div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+        <div class="glass-card" style="padding: 1.2rem; align-items: center; text-align: center;">
+          <span style="color: var(--text-muted); font-size: 0.9rem;">My Tracked Skills</span>
+          <h3 id="stat-skills-count" style="font-size: 2rem; margin-top: 0.3rem; color: var(--purple);">0</h3>
+        </div>
+        <div class="glass-card" style="padding: 1.2rem; align-items: center; text-align: center;">
+          <span style="color: var(--text-muted); font-size: 0.9rem;">Completed Tasks</span>
+          <h3 id="stat-tasks-count" style="font-size: 2rem; margin-top: 0.3rem; color: var(--teal);">0</h3>
+        </div>
+        <div class="glass-card" style="padding: 1.2rem; align-items: center; text-align: center;">
+          <span style="color: var(--text-muted); font-size: 0.9rem;">Daily Login Streak</span>
+          <h3 id="stat-streak-count" style="font-size: 2rem; margin-top: 0.3rem; color: var(--amber);">1d</h3>
+        </div>
+      </div>
+
+      <div class="dashboard-grid">
+        <div class="glass-card">
+          <h3 style="margin-bottom: 1rem; display:flex; justify-content:space-between; align-items:center;">My Skills Matrix <button class="btn btn-outline btn-sm" onclick="navigateTo('section-skills')">Update</button></h3>
+          <div id="dashboard-skills-container" class="skill-bars-stack"></div>
+        </div>
+        
+        <div class="glass-card">
+          <h3 style="margin-bottom: 1rem; color: var(--purple);">🤖 SkillCopilot Recommended Tasks</h3>
+          <div id="dashboard-rec-container" class="recommendations-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="section-skills" style="display: none;">
+      <h2>Skills Matrix Manager</h2>
+      <p class="text-muted">Add and verify your technical skills proficiencies based on completed projects.</p>
+      
+      <div class="glass-card" style="margin-top: 1.5rem; margin-bottom: 2rem;">
+        <h3 style="margin-bottom: 1rem;">Add New Skill Metric</h3>
+        <form id="form-add-skill" style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; align-items: flex-end;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Select Skill Category</label>
+            <select id="new-skill-category" required></select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Current Experience Tier</label>
+            <select id="new-skill-level">
+              <option value="Beginner">Beginner Level</option>
+              <option value="Intermediate" selected>Intermediate Level</option>
+              <option value="Advanced">Advanced Engineering Level</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-purple" style="height: 45px;">Add Skill</button>
+        </form>
+      </div>
+
+      <h3>Active Verified Skills Workspace</h3>
+      <div id="skills-matrix-container" class="matrix-grid"></div>
+    </section>
+
+    <section id="section-tasks" style="display: none;">
+      <h2>Open Tasks Repository</h2>
+      <p class="text-muted">Accept codebase tasks, solve system bugs, and submit work to earn validation XP points.</p>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; gap: 1rem; flex-wrap: wrap;">
+        <input type="text" id="task-search-input" placeholder="Filter tasks by name..." style="padding: 0.6rem 1rem; width: 300px; background: var(--bg-card); border:1px solid var(--border-color); border-radius:6px; color:#fff;">
+        <div class="filter-chips-row">
+          <div class="chip active">All difficulties</div>
+          <div class="chip">Beginner</div>
+          <div class="chip">Intermediate</div>
+          <div class="chip">Advanced</div>
+        </div>
+      </div>
+
+      <div id="tasks-cards-container" class="tasks-grid"></div>
+    </section>
+
+    <section id="section-leaderboard" style="display: none;">
+      <h2>🏆 Global Engineering Leaderboard</h2>
+      <p class="text-muted">Top performing engineers ranked by validated system tracking metrics.</p>
+      <div style="background: var(--bg-card); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); margin-top: 1.5rem; overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; text-align: left;">
+          <thead>
+            <tr style="border-bottom: 2px solid var(--border-color); color: var(--text-muted); font-size: 0.9rem;">
+              <th style="padding: 12px;">Global Rank</th>
+              <th style="padding: 12px;">Engineer Name</th>
+              <th style="padding: 12px;">Assigned Role</th>
+              <th style="padding: 12px;">Total Earned Score (XP)</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-entries"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="section-ai" style="display: none;">
+      <h2>SkillCopilot AI Assistant Workspace</h2>
+      <p class="text-muted">Ask technical questions, get roadmap guidance, or auto-generate blueprint code structures.</p>
+      
+      <div class="glass-card" style="margin-top: 1.5rem; padding: 1.5rem; gap:1.2rem;">
+        <div id="chat-stream-box">
+          <div id="ai-typing-loader" style="display:none; gap:5px; align-items:center; padding: 0.5rem; color: var(--text-muted); font-size: 0.85rem;">
+            <div class="spinner-object" style="width:15px; height:15px; border-width:2px;"></div> Copilot is writing a response...
+          </div>
+        </div>
+        <form id="form-chat-input" style="display: flex; gap: 1rem;">
+          <input type="text" id="chat-user-textbox" placeholder="Ask questions or type coding queries..." style="flex:1; padding:0.75rem; background:#0b0c13; border:1px solid var(--border-color); border-radius:6px; color:#fff;" required>
+          <button type="submit" class="btn btn-purple">Send Message</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="section-admin" style="display: none;">
+      <h2>Administrative Control Dashboard</h2>
+      <p class="text-muted">Review student work submissions, audit workspace setups, and manage master project blueprints.</p>
+      
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin: 1.5rem 0;">
+        <div class="glass-card" style="padding:1.2rem; border-left:4px solid var(--purple);"><span style="font-size:0.85rem; color:var(--text-muted);">Active Registered Students</span><h2 class="stat-val" style="margin-top:5px; color:var(--text-main);">0</h2></div>
+        <div class="glass-card" style="padding:1.2rem; border-left:4px solid var(--amber);"><span style="font-size:0.85rem; color:var(--text-muted);">Pending Submissions Audit</span><h2 class="stat-val" style="margin-top:5px; color:var(--amber);">0</h2></div>
+        <div class="glass-card" style="padding:1.2rem; border-left:4px solid var(--teal);"><span style="font-size:0.85rem; color:var(--text-muted);">Total Sprint Tasks Approved</span><h2 class="stat-val" style="margin-top:5px; color:var(--teal);">0</h2></div>
+      </div>
+
+      <div class="admin-data-section" style="margin-top: 2rem;">
+        <h3>System Task Management Core</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 1rem; text-align: left; background: var(--bg-card); border-radius: 8px; border: 1px solid var(--border-color);">
+          <thead><tr style="border-bottom:1px solid var(--border-color); background: #0b0c13; color: var(--text-muted);"><th style="padding:10px;">ID Key</th><th style="padding:10px;">Task Title</th><th style="padding:10px;">Difficulty</th><th style="padding:10px;">XP Value</th><th style="padding:10px;">Actions</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="admin-data-section" style="margin-top: 2rem;">
+        <h3>Pending Student Work Submissions Audit Queue</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 1rem; text-align: left; background: var(--bg-card); border-radius: 8px; border: 1px solid var(--border-color);">
+          <thead><tr style="border-bottom:1px solid var(--border-color); background: #0b0c13; color: var(--text-muted);"><th style="padding:10px;">Student Email</th><th style="padding:10px;">Task Title</th><th style="padding:10px;">Submission Asset Link</th><th style="padding:10px;">Review Decision Actions</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="loading-spinner"><div class="spinner-object"></div></div>
+  <div id="toast"><span id="toast-message">Notification message</span></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
