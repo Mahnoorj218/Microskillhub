@@ -53,9 +53,6 @@ def create_access_token(data: dict) -> str:
 # DEPENDENCY: get_current_user
 # ==========================================
 async def get_current_user(authorization: str = Header(...)) -> dict:
-    """
-    Decodes the Bearer token from the Authorization header and verifies the user.
-    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -87,14 +84,12 @@ async def get_current_user(authorization: str = Header(...)) -> dict:
 async def register(payload: models.RegisterRequest):
     conn, cursor = get_db_cursor()
     try:
-        # Check if email exists (Changed 'id' to 'user_id' to match schema)
         cursor.execute("SELECT user_id FROM users WHERE email = %s", (payload.email,))
         if cursor.fetchone():
             raise HTTPException(status_code=400, detail="Email already registered")
 
         hashed_pwd = hash_password(payload.password)
         
-        # Changed 'password' to 'password_hash' to match schema
         query = """
             INSERT INTO users (full_name, email, password_hash, role, roll_number)
             VALUES (%s, %s, %s, %s, %s)
@@ -113,7 +108,6 @@ async def register(payload: models.RegisterRequest):
 async def login(payload: models.LoginRequest):
     conn, cursor = get_db_cursor()
     try:
-        # Changed 'id' to 'user_id' and 'password' to 'password_hash' to match schema
         cursor.execute("SELECT user_id, full_name, password_hash, role FROM users WHERE email = %s", (payload.email,))
         user = cursor.fetchone()
         
@@ -145,7 +139,6 @@ async def login(payload: models.LoginRequest):
 async def get_all_skills():
     conn, cursor = get_db_cursor()
     try:
-        # Changed 'id' to 'skill_id' to match schema
         cursor.execute("SELECT skill_id, skill_name, category FROM skills")
         return cursor.fetchall()
     finally:
@@ -156,7 +149,6 @@ async def get_all_skills():
 async def get_my_skills(current_user: dict = Depends(get_current_user)):
     conn, cursor = get_db_cursor()
     try:
-        # Changed primary key names to match user_skills schema
         query = """
             SELECT us.user_skill_id, us.skill_id, s.skill_name, us.proficiency_level, us.proficiency_percent 
             FROM user_skills us
@@ -176,7 +168,6 @@ async def add_skill(payload: models.AddSkillRequest, current_user: dict = Depend
         
     conn, cursor = get_db_cursor()
     try:
-        # Changed 'id' to 'user_skill_id'
         cursor.execute(
             "SELECT user_skill_id FROM user_skills WHERE user_id = %s AND skill_id = %s",
             (current_user['user_id'], payload.skill_id)
@@ -205,7 +196,6 @@ async def delete_skill(payload: models.DeleteSkillRequest, current_user: dict = 
         
     conn, cursor = get_db_cursor()
     try:
-        # Changed 'id' to 'user_skill_id'
         cursor.execute(
             "SELECT user_skill_id FROM user_skills WHERE user_skill_id = %s AND user_id = %s",
             (payload.user_skill_id, current_user['user_id'])
@@ -231,12 +221,10 @@ async def delete_skill(payload: models.DeleteSkillRequest, current_user: dict = 
 async def get_all_tasks(current_user: dict = Depends(get_current_user)):
     conn, cursor = get_db_cursor()
     try:
-        # Changed 'is_active = TRUE' to status = 'active' to match schema
         cursor.execute("SELECT * FROM tasks WHERE status = 'active'")
         tasks = cursor.fetchall()
         
         for task in tasks:
-            # Updated cross-reference table mapping names to task_required_skills
             query = """
                 SELECT s.skill_name, ts.required_level FROM task_required_skills ts
                 JOIN skills s ON ts.skill_id = s.skill_id
@@ -257,7 +245,6 @@ async def get_my_applications(current_user: dict = Depends(get_current_user)):
         
     conn, cursor = get_db_cursor()
     try:
-        # Fixed 'a.id' and 't.id' targets
         query = """
             SELECT a.app_id, a.status, a.submission_text, a.applied_at,
                    t.title, t.description, t.difficulty, t.reward_xp
@@ -278,7 +265,6 @@ async def apply_to_task(payload: models.ApplyTaskRequest, current_user: dict = D
         
     conn, cursor = get_db_cursor()
     try:
-        # Fixed 'id' to 'app_id'
         cursor.execute(
             "SELECT app_id FROM applications WHERE user_id = %s AND task_id = %s",
             (current_user['user_id'], payload.task_id)
@@ -297,14 +283,14 @@ async def apply_to_task(payload: models.ApplyTaskRequest, current_user: dict = D
         close_db(conn, cursor)
 
 
-@app.post("/api/tasks/submit-proof")
+# FIXED: Route updated from '/api/tasks/submit-proof' to '/api/tasks/submit' to match frontend app.js
+@app.post("/api/tasks/submit")
 async def submit_proof(payload: models.SubmitProofRequest, current_user: dict = Depends(get_current_user)):
     if current_user['role'] != "student":
         raise HTTPException(status_code=403, detail="Only students can submit task performance proof.")
         
     conn, cursor = get_db_cursor()
     try:
-        # Fixed 'id' to 'app_id'
         cursor.execute(
             "SELECT app_id FROM applications WHERE app_id = %s AND user_id = %s",
             (payload.app_id, current_user['user_id'])
@@ -339,14 +325,12 @@ async def recommend_tasks(current_user: dict = Depends(get_current_user)):
         cursor.execute("SELECT skill_id, proficiency_level FROM user_skills WHERE user_id = %s", (current_user['user_id'],))
         student_skills = {row['skill_id']: prof_map.get(row['proficiency_level'], 0) for row in cursor.fetchall()}
         
-        # Fixed status match query filter
         cursor.execute("SELECT * FROM tasks WHERE status = 'active'")
         tasks = cursor.fetchall()
         
         recommended_tasks = []
         
         for task in tasks:
-            # Fixed table relationships to match schema names
             cursor.execute("SELECT skill_id, required_level FROM task_required_skills WHERE task_id = %s", (task['task_id'],))
             req_skills = cursor.fetchall()
             
@@ -374,6 +358,31 @@ async def recommend_tasks(current_user: dict = Depends(get_current_user)):
             
         recommended_tasks.sort(key=lambda x: x['match_percent'], reverse=True)
         return recommended_tasks[:5]
+    finally:
+        close_db(conn, cursor)
+
+
+# ==========================================
+# LEADERBOARD ROUTE (ADDED TO FIX 404 ERRORS)
+# ==========================================
+@app.get("/api/leaderboard/global")
+async def get_global_leaderboard(current_user: dict = Depends(get_current_user)):
+    conn, cursor = get_db_cursor()
+    try:
+        query = """
+            SELECT u.full_name as name, u.role, IFNULL(SUM(e.xp_earned), 0) as xp
+            FROM users u
+            LEFT JOIN experience e ON u.user_id = e.user_id
+            WHERE u.role = 'student'
+            GROUP BY u.user_id
+            ORDER BY xp DESC
+            LIMIT 10
+        """
+        cursor.execute(query)
+        ranking = cursor.fetchall()
+        return {"ranking": ranking}
+    except mysql.connector.Error:
+        raise HTTPException(status_code=500, detail="Failed to fetch leaderboard statistics.")
     finally:
         close_db(conn, cursor)
 
@@ -421,7 +430,6 @@ async def get_admin_stats(current_user: dict = Depends(get_current_user)):
         cursor.execute("SELECT COUNT(*) as count FROM tasks")
         tasks = cursor.fetchone()['count']
         
-        # Updated pending status target check to match default 'pending' enum template
         cursor.execute("SELECT COUNT(*) as count FROM applications WHERE status = 'pending'")
         pending = cursor.fetchone()['count']
         
@@ -445,7 +453,6 @@ async def get_pending_submissions(current_user: dict = Depends(get_current_user)
         
     conn, cursor = get_db_cursor()
     try:
-        # Fixed explicit system column connections
         query = """
             SELECT a.app_id, a.submission_text, a.status, a.applied_at,
                    u.full_name as student_name, u.email as student_email,
@@ -468,7 +475,6 @@ async def review_submission(payload: models.ReviewRequest, current_user: dict = 
         
     conn, cursor = get_db_cursor()
     try:
-        # Changed 'id' to 'app_id'
         cursor.execute("SELECT user_id, task_id, status FROM applications WHERE app_id = %s", (payload.app_id,))
         application = cursor.fetchone()
         
@@ -483,7 +489,6 @@ async def review_submission(payload: models.ReviewRequest, current_user: dict = 
             cursor.execute("SELECT reward_xp FROM tasks WHERE task_id = %s", (application['task_id'],))
             task_info = cursor.fetchone()
             
-            # Changed 'xp_gained' to 'xp_earned' to match script schema layout definitions
             xp_query = "INSERT INTO experience (user_id, app_id, xp_earned) VALUES (%s, %s, %s)"
             cursor.execute(xp_query, (application['user_id'], payload.app_id, task_info['reward_xp']))
             
@@ -503,7 +508,6 @@ async def create_task(payload: models.CreateTaskRequest, current_user: dict = De
         
     conn, cursor = get_db_cursor()
     try:
-        # Fixed 'is_active' mapping pattern variables to default 'active' strings definitions
         task_query = """
             INSERT INTO tasks (title, description, difficulty, reward_xp, status, created_by)
             VALUES (%s, %s, %s, %s, 'active', %s)
@@ -533,7 +537,6 @@ async def delete_task(task_id: int, current_user: dict = Depends(get_current_use
         
     conn, cursor = get_db_cursor()
     try:
-        # Changed 'id' to 'app_id' and verification string filter checks to 'pending' strings layouts
         cursor.execute("SELECT app_id FROM applications WHERE task_id = %s AND status = 'pending'", (task_id,))
         if cursor.fetchone():
             raise HTTPException(status_code=400, detail="Cannot purge a task holding pending un-reviewed user submissions.")
@@ -558,7 +561,6 @@ async def get_all_users_reporting(current_user: dict = Depends(get_current_user)
         
     conn, cursor = get_db_cursor()
     try:
-        # Mapped primary key targets perfectly to user_id models layouts
         query = """
             SELECT u.user_id, u.full_name, u.email, u.roll_number,
                    (SELECT COUNT(*) FROM user_skills WHERE user_id = u.user_id) as skill_count,
