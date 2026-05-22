@@ -572,3 +572,4 @@ async def get_all_users_reporting(current_user: dict = Depends(get_current_user)
         return cursor.fetchall()
     finally:
         close_db(conn, cursor)
+        
