@@ -38,11 +38,14 @@ Project ab **MySQL ki jagah Supabase** use karta hai:
 
 ---
 
-## 4. Email confirmation band karo (development)
+## 4. Email settings (register / rate limit)
 
 **Authentication → Providers → Email**
 
-- **Confirm email** = OFF (taake register ke baad turant login ho)
+- **Confirm email** = **OFF** (turant login, kam emails)
+- Agar `email rate limit exceeded` aaye: **Authentication → Rate Limits** → limits badhao, ya ~1 ghanta wait
+
+Backend register ab confirmation email **nahi** bhejta.
 
 ---
 

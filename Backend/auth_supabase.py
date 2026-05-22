@@ -21,22 +21,32 @@ def sign_up_user(
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    # admin.create_user + email_confirm avoids signup confirmation emails
+    # (sign_up hits Supabase "email rate limit exceeded" on free SMTP)
     try:
-        auth_res = client.auth.sign_up(
+        auth_res = client.auth.admin.create_user(
             {
                 "email": email,
                 "password": password,
-                "options": {
-                    "data": {
-                        "full_name": full_name,
-                        "role": role,
-                        "roll_number": roll_number,
-                    }
+                "email_confirm": True,
+                "user_metadata": {
+                    "full_name": full_name,
+                    "role": role,
+                    "roll_number": roll_number,
                 },
             }
         )
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        msg = str(exc)
+        if "rate limit" in msg.lower():
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Supabase email rate limit reached. Wait 1 hour or disable "
+                    "Confirm email in Supabase → Authentication → Providers → Email."
+                ),
+            ) from exc
+        raise HTTPException(status_code=400, detail=msg) from exc
 
     if not auth_res.user:
         raise HTTPException(status_code=400, detail="Registration failed")
